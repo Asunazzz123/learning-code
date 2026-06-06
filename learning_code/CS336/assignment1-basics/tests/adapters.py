@@ -105,7 +105,13 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    mul = torch.matmul(Q,K.transpose(-2,-1)) / torch.sqrt(torch.tensor(K.shape[-1],device = K.device, dtype = K.dtype))
+    if (mask is None):
+        mask_mul = mul
+    else:
+        mask_mul = mul.masked_fill(mask,-torch.inf)
+    return torch.matmul(torch.softmax(mask_mul,dim=-1),V)
+    # raise NotImplementedError
 
 
 def run_multihead_self_attention(
