@@ -235,13 +235,13 @@ def run_rope(
 
     cos_ = torch.cos(angle)
     sin_ = torch.sin(angle)
-    x_even = x[... 0::2]
-    x_odd = x[... 1::2]
+    x_even = x[...,0::2]
+    x_odd = x[...,1::2]
     out_even = x_even * cos_ - x_odd * sin_
     out_odd = x_even * sin_ + x_odd * cos_
     out = torch.empty_like(x)
-    out[... 0::2] = out_even
-    out[... 1::2] = out_odd
+    out[...,0::2] = out_even
+    out[...,1::2] = out_odd
     return out
     # raise NotImplementedError
 
