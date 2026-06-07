@@ -456,7 +456,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-    raise NotImplementedError
+    return in_features / (1 + torch.exp(- in_features))
+    # raise NotImplementedError
 
 
 def run_get_batch(
@@ -495,7 +496,10 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
-    raise NotImplementedError
+    max_val = torch.max(in_features,dim,keepdim=True).values
+    sum_val = torch.sum(torch.exp(in_features - max_val),dim,keepdim=True)
+    return torch.exp(in_features - max_val) / sum_val
+    # raise NotImplementedError
 
 
 def run_cross_entropy(
