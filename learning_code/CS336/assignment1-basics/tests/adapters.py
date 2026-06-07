@@ -116,7 +116,7 @@ def run_scaled_dot_product_attention(
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
     mul = torch.matmul(Q,K.transpose(-2,-1)) / torch.sqrt(torch.tensor(K.shape[-1],device = K.device, dtype = K.dtype))
-    if (mask is None):
+    if (mask is None): 
         mask_mul = mul
     else:
         mask_mul = mul.masked_fill(mask,-torch.inf)
@@ -155,14 +155,11 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    head = []
     d_k = d_model // num_heads
-    Q = (in_features @ q_proj_weight).reshape(...,num_heads,d_k)
-    K = (in_features @ k_proj_weight).reshape(...,num_heads,d_k)
-    V = (in_features @ v_proj_weight).reshape(...,num_heads,d_k)
-    Q = Q.reshape(*Q.shape[:-1], num_heads, d_k).transpose(-2, -3) # Dimension separate: averagely separate d_model into heads and 
-    K = K.reshape(*K.shape[:-1], num_heads, d_k).transpose(-2, -3)
-    V = V.reshape(*V.shape[:-1], num_heads, d_k).transpose(-2, -3)
+    Q = (in_features @ q_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3) 
+    K = (in_features @ k_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
+    V = (in_features @ v_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
+
     attn_output = run_scaled_dot_product_attention(Q, K, V)
     attn_output = attn_output.transpose(-2, -3).reshape(*in_features.shape[:-1], d_model)
     return attn_output @ o_proj_weight.T
@@ -337,6 +334,9 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
+
+
+
     raise NotImplementedError
 
 
