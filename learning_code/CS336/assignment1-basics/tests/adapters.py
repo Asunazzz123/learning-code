@@ -206,7 +206,28 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    d_k = d_model // num_heads
+    Q = (in_features @ q_proj_weight).reshape(...,num_heads, d_k) 
+    K = (in_features @ k_proj_weight).reshape(...,num_heads, d_k) 
+    V = (in_features @ v_proj_weight).reshape(...,num_heads, d_k)
+    Q = Q.reshape(*Q.shape[:-1], num_heads, d_k).transpose(-2, -3)
+    K = K.reshape(*K.shape[:-1], num_heads, d_k).transpose(-2, -3)
+    V = V.reshape(*V.shape[:-1], num_heads, d_k).transpose(-2, -3)
+    if (token_positions is None):
+        Q_rope = Q
+        K_rope = K
+    else:
+        Q_rope = run_rope(d_k,theta, max_seq_len, Q, token_positions)
+        K_rope = run_rope(d_k,theta, max_seq_len, K, token_positions)
+        
+    attn = run_scaled_dot_product_attention(Q_rope,K_rope,V).transpose(-2,-3).reshape(*in_features.shape[:-1],d_model)
+    return attn @ o_proj_weight.T
+
+
+
+
+
+    # raise NotImplementedError
 
 
 def run_rope(
