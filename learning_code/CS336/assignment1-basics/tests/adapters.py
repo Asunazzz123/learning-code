@@ -442,8 +442,9 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-
-    raise NotImplementedError
+    rms = torch.sqrt(1/d_model *torch.sum(in_features ** 2,dim=-1,keepdim=True)+ eps)
+    return weights * in_features / rms
+    # raise NotImplementedError
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -518,7 +519,11 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    raise NotImplementedError
+    inputs_ = run_softmax(inputs,dim=-1)
+    target_tensor = inputs_[torch.arange(inputs.shape[0]),targets]
+    return -torch.mean(torch.log(target_tensor))
+    
+    # raise NotImplementedError
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
