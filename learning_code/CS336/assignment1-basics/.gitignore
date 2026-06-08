@@ -162,3 +162,12 @@ cython_debug/
 .ruff_cache/
 *.zip
 .vscode
+
+
+# Personal Repo ignore
+
+LICENSE
+cs336_assignment1_basics.pdf
+CHANGELOG.md
+AGENTS.md
+CLAUDE.md

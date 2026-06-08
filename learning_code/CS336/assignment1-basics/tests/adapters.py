@@ -120,7 +120,7 @@ def run_scaled_dot_product_attention(
         mask_mul = mul
     else:
         mask_mul = mul.masked_fill(mask,-torch.inf)
-    return torch.matmul(torch.softmax(mask_mul,dim=-1),V)
+    return torch.matmul(run_softmax(mask_mul,dim=-1),V)
     # raise NotImplementedError
 
 
@@ -442,6 +442,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
+
     raise NotImplementedError
 
 
@@ -493,7 +494,7 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         dim (int): Dimension of the `in_features` to apply softmax to.
 
     Returns:
-        Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
+        Float[Tensor, "..."]: Tensor of with the same s,hape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
     max_val = torch.max(in_features,dim,keepdim=True).values
