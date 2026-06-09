@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
@@ -587,7 +588,7 @@ def run_get_lr_cosine_schedule(
     if it < warmup_iters:
         lr = it / warmup_iters * max_learning_rate
     elif (it <= cosine_cycle_iters) and (it >= warmup_iters):
-        cosine_factor = 1 + torch.cos((it-warmup_iters)/(cosine_cycle_iters - warmup_iters)*torch.pi)
+        cosine_factor = 1 + math.cos((it-warmup_iters)/(cosine_cycle_iters - warmup_iters)*torch.pi)
         lr = min_learning_rate + 1/2 * cosine_factor * (max_learning_rate - min_learning_rate)
     else:
         lr = min_learning_rate
