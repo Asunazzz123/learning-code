@@ -583,7 +583,16 @@ def run_get_lr_cosine_schedule(
     Returns:
         Learning rate at the given iteration under the specified schedule.
     """
-    raise NotImplementedError
+
+    if it < warmup_iters:
+        lr = it / warmup_iters * max_learning_rate
+    elif (it <= cosine_cycle_iters) and (it >= warmup_iters):
+        cosine_factor = 1 + torch.cos((it-warmup_iters)/(cosine_cycle_iters - warmup_iters)*torch.pi)
+        lr = min_learning_rate + 1/2 * cosine_factor * (max_learning_rate - min_learning_rate)
+    else:
+        lr = min_learning_rate
+    return lr
+    # raise NotImplementedError
 
 
 def run_save_checkpoint(
