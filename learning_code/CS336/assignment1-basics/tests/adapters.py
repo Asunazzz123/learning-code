@@ -540,14 +540,22 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    norm = 0
+    for p in parameters:
+        norm += torch.norm(p.grad) ** 2
+    total_norm = torch.sqrt(norm)
+    if total_norm > max_l2_norm:
+        for p in parameters:
+            p.grad *= max_l2_norm / (total_norm + 10**(-6))
+    # raise NotImplementedError
 
 
 def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    raise NotImplementedError
+    return torch.optim.AdamW
+    # raise NotImplementedError
 
 
 def run_get_lr_cosine_schedule(
@@ -615,6 +623,7 @@ def run_load_checkpoint(
     Returns:
         int: the previously-serialized number of iterations.
     """
+    
     raise NotImplementedError
 
 
