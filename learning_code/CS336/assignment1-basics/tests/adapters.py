@@ -540,7 +540,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    norm = 0
+    norm = torch.tensor(0.0)
     for p in parameters:
         norm += torch.norm(p.grad) ** 2
     total_norm = torch.sqrt(norm)
