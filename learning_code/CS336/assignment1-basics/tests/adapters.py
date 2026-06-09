@@ -620,7 +620,7 @@ def run_save_checkpoint(
         },
         out
     )
-    raise NotImplementedError
+    # raise NotImplementedError
 
 
 def run_load_checkpoint(
