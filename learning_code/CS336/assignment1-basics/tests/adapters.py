@@ -4,7 +4,7 @@ import os
 import math
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
-
+from cs336_basics.tokenizer import Tokenizer
 import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
@@ -668,7 +668,8 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    raise NotImplementedError
+    return Tokenizer(vocab=vocab,merge=merges,special_token=special_tokens)
+    # raise NotImplementedError
 
 
 def run_train_bpe(
@@ -699,3 +700,5 @@ def run_train_bpe(
                 Merges are ordered by order of creation.
     """
     raise NotImplementedError
+
+
