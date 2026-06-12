@@ -14,8 +14,9 @@ class Tokenizer:
         self.merges = merges
         self.special_tokens = special_tokens or []
         self.byte_to_id = {v: k for k, v in vocab.items()}
-        self.merge_ranks = {pair: rank for rank, pair in enumerate(merges)}
-        
+        self.merge_ranks_bytes = {pair[0]+pair[1]: rank for rank, pair in enumerate(merges)}
+    
+    
     def _token_split_special_token(self,text: str) -> list[tuple[bytes,bytes]]:
         if not self.special_tokens:
             return [(text, False)]
@@ -28,7 +29,7 @@ class Tokenizer:
             for part in parts
             if part != ""
         ]
-
+    
     def _bpe_encoder(self,raw_byte: bytes):
         tokens = [bytes([b]) for b in raw_byte]
 
@@ -36,12 +37,12 @@ class Tokenizer:
             if len(tokens) < 2:
                 break
             pairs = [tokens[i] + tokens[i+1] for i in range(len(tokens) - 1)]
-            candidate = [pair for pair in pairs if pair in self.merge_ranks]
+            candidate = [pair for pair in pairs if pair in self.merge_ranks_bytes]
 
             if not candidate:
                 break
             
-            best_pair = min(candidate, key = lambda pair: self.merge_ranks[pair])
+            best_pair = min(candidate, key = lambda pair: self.merge_ranks_bytes[pair])
 
             new_tokens = []
             i = 0
