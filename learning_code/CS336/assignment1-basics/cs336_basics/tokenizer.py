@@ -1,7 +1,7 @@
 import re
 from collections import OrderedDict
 class Tokenizer:
-    def __init__(self,vocab,merges,special_token = None):
+    def __init__(self,vocab,merges,special_tokens = None):
         """Args:
         vocab (dict[int, bytes]): The tokenizer vocabulary, a mapping from int (token ID in the vocabulary)
             to bytes (token bytes)
@@ -12,67 +12,71 @@ class Tokenizer:
             be split into multiple tokens, and will always be kept as a single token."""
         self.vocab = vocab
         self.merges = merges
-        self.special_token = special_token or []
-        self.byte_to_id = OrderedDict
-        self.merge_ranks = OrderedDict
+        self.special_tokens = special_tokens or []
+        self.byte_to_id = {v: k for k, v in vocab.items()}
+        self.merge_ranks = {pair: rank for rank, pair in enumerate(merges)}
+        
+    def _token_split_special_token(self,text: str) -> list[tuple[bytes,bytes]]:
+        if not self.special_tokens:
+            return [(text, False)]
+        special_tokens = sorted(self.special_tokens, key = len , reverse= True)
+        pattern = "(" + "|".join(re.escape(token) for token in self.special_tokens) + ")"
+        parts = re.split(pattern, text)
+        special_set = set(self.special_tokens)
+        return [
+            (part, part in special_set)
+            for part in parts
+            if part != ""
+        ]
 
-    def encode(self,text:str):
-        tokens = [bytes([b]) for b in text.encode("utf-8")]
+    def _bpe_encoder(self,raw_byte: bytes):
+        tokens = [bytes([b]) for b in raw_byte]
+
         while True:
             if len(tokens) < 2:
                 break
-            pairs = [
-                (tokens[i], tokens[i + 1])
-                for i in range(len(tokens) - 1)
-            ]
-            candidates = [
-                pair for pair in pairs
-                if pair in self.merge_ranks
-            ]
-            if not candidates:
+            pairs = [tokens[i] + tokens[i+1] for i in range(len(tokens) - 1)]
+            candidate = [pair for pair in pairs if pair in self.merge_ranks]
+
+            if not candidate:
                 break
-            best_pair = min(candidates, key=lambda pair: self.merge_ranks[pair])
+            
+            best_pair = min(candidate, key = lambda pair: self.merge_ranks[pair])
+
             new_tokens = []
             i = 0
             while i < len(tokens):
-                if (
-                    i < len(tokens) - 1
-                    and tokens[i] == best_pair[0]
-                    and tokens[i + 1] == best_pair[1]
-                ):
-                    new_tokens.append(tokens[i] + tokens[i + 1])
+                if ( i < len(tokens) - 1 and tokens[i] + tokens[i+1] == best_pair):
+                    new_tokens.append(tokens[i] + tokens[i+1])
                     i += 2
                 else:
                     new_tokens.append(tokens[i])
                     i += 1
             tokens = new_tokens
-        return [self.byte_to_id[token] for token in tokens]
-    def _add_special_token(self):
-        for token in self.special_token:
-            if token not in self.byte_to_id:
+        return tokens
                 
+            
+
+    def encode(self,text: str) -> list[int]:
+        token_ids = []
+        for piece, is_special in self._token_split_special_token(text):
+            if piece == "":
+                continue
+            
+            if is_special:
+                token_bytes = piece.encode("utf-8")
+                token_ids.append(self.byte_to_id[token_bytes])
+            
+            else:
+                token_bytes = piece.encode("utf-8")
+                tokens = self._bpe_encoder(token_bytes)
+                token_ids.extend(self.byte_to_id[token] for token in tokens)
+        return token_ids
+    
 
         # pass
-    def decode(self,token):
-        pass 
 
-    def _merge_token(self,tokens,new_token):
-        merge_token = []
-        i = 0
-
-        while i < len(tokens):
-            if i+1 < len(tokens) and tokens[i]+ tokens[i+1] == new_token:
-                merge_token.append(tokens[i]+tokens[i+1])
-            else:
-                merge_token.append(tokens[i])
-
-        return merge_token
-    def _pair_stat(self,tokens,stat):
-        for i in range(len(tokens)-1):
-            new_token = tokens[i] + tokens[i+1]
-            if new_token not in stat:
-                stat[new_token] = 0
-            stat[new_token] += 1
-
-    
-             
+    def decode(self,ids: list[int]) -> str:
+        raw_bytes = b"".join(self.vocab[token_id] for token_id in ids)
+        return raw_bytes.decode("utf-8", errors="replace")
+        # pass
