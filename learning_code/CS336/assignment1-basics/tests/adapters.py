@@ -451,7 +451,33 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    d_k = d_model // num_heads
+    embed_output = run_embedding(vocab_size=vocab_size,d_model=d_model,weights=weights.get("token_embeddings.weight"),token_ids=in_indices)
+    flow = embed_output
+    for i in range(num_layers):
+        layer_weights = {
+        "attn.q_proj.weight": weights.get(f"layers.{i}.attn.q_proj.weight"),
+        "attn.k_proj.weight": weights.get(f"layers.{i}.attn.k_proj.weight"),
+        "attn.v_proj.weight": weights.get(f"layers.{i}.attn.v_proj.weight"),
+        "attn.o_proj.weight": weights.get(f"layers.{i}.attn.o_proj.weight"),
+        "ln1.weight": weights.get(f"layers.{i}.ln1.weight"),
+        "ln2.weight": weights.get(f"layers.{i}.ln2.weight"),
+        "ffn.w1.weight": weights.get(f"layers.{i}.ffn.w1.weight"),
+        "ffn.w2.weight": weights.get(f"layers.{i}.ffn.w2.weight"),
+        "ffn.w3.weight": weights.get(f"layers.{i}.ffn.w3.weight")
+    }
+        flow = run_transformer_block(
+            d_model=d_model,
+            num_heads=num_heads,
+            d_ff=d_ff,
+            theta=rope_theta,
+            weights=layer_weights,
+            in_features=flow
+            )
+    rms_output = run_rmsnorm(d_model=d_model,eps = 10**(-6),weights=weights.get("ln_final.weight"),in_features=flow)
+    lm_output = run_linear(d_in=d_model,d_out=vocab_size,weights=weights.get("lm_head.weight"),in_features=rms_output)
+    return lm_output
+    # raise NotImplementedError
 
 
 def run_rmsnorm(
