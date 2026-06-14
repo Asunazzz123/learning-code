@@ -81,3 +81,4 @@ class Tokenizer:
         raw_bytes = b"".join(self.vocab[token_id] for token_id in ids)
         return raw_bytes.decode("utf-8", errors="replace")
         # pass
+

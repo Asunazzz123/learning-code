@@ -335,10 +335,41 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
+    d_k = d_model // num_heads
+    seq_len = in_features.shape[-2]
+    token_positions = torch.arange(seq_len,device = in_features.device)
+
+
+    input_hvec_1 = run_rmsnorm(d_model=d_model,eps=10**(-6),weights=weights.get("ln1.weight"),in_features=in_features)
+    attn_output =in_features + run_multihead_self_attention_with_rope(
+        d_model=d_model,
+        num_heads=num_heads,
+        max_seq_len=max_seq_len,
+        theta=theta,
+        q_proj_weight=weights.get("attn.q_proj.weight"),
+        k_proj_weight=weights.get("attn.k_proj.weight"),
+        v_proj_weight=weights.get("attn.v_proj.weight"),
+        o_proj_weight=weights.get("attn.o_proj.weight"),
+        in_features=input_hvec_1,
+        token_positions=token_positions
+        )
+    
+    input_hvec_2 = run_rmsnorm(d_model=d_model,eps=10**(-6),weights=weights.get("ln2.weight"),in_features=attn_output)
+    
+    ffn_output = attn_output + run_swiglu(
+        d_model=d_model,
+        d_ff=d_ff,
+        w1_weight=weights.get("ffn.w1.weight"),
+        w2_weight=weights.get("ffn.w2.weight"),
+        w3_weight=weights.get("ffn.w3.weight"),
+        in_features=input_hvec_2
+    )
+
+    return ffn_output
 
 
 
-    raise NotImplementedError
+    # raise NotImplementedError
 
 
 def run_transformer_lm(
