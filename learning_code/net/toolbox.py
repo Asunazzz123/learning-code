@@ -28,4 +28,6 @@ def division(a, b):
     return remainder.zfill(remainder_len)
 
 if __name__ == "__main__":
-    print(division(11010110110000, 10011))
+    a = input("a = ")
+    b = input("b = ")
+    print(division(a, b))
