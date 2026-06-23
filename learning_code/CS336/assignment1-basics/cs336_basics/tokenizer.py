@@ -95,10 +95,11 @@ def train(
         text = f.read()
 
     vocab = {i: bytes([i]) for i in range(256)}
-    for special_token in special_tokens:
-        vocab[len(vocab)] = special_token.encode("utf-8")
+    
 
     if special_tokens:
+        for special_token in special_tokens:
+            vocab[len(vocab)] = special_token.encode("utf-8")
         special_pattern = "|".join(regex.escape(token) for token in sorted(special_tokens, key=len, reverse=True))
         chunks = regex.split(special_pattern, text)
     else:
@@ -120,7 +121,7 @@ def train(
 
         if not pair_counts:
             break
-
+        
         best_pair = max(pair_counts.items(), key=lambda item: (item[1], item[0]))[0]
         new_token = best_pair[0] + best_pair[1]
         merges.append(best_pair)
