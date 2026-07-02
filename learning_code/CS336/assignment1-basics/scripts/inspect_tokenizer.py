@@ -2,7 +2,7 @@ import json
 import sys
 sys.path.insert(0, "learning_code/CS336/assignment1-basics")
 
-from cs336_basics.tokenizer import Tokenizer
+from cs336_basics.tokenizer import TokenizerNoRegex, TokenizerWithRegex
 from tests.common import FIXTURES_PATH, gpt2_bytes_to_unicode
 
 
@@ -26,7 +26,10 @@ with open(FIXTURES_PATH / "gpt2_merges.txt") as f:
                 bytes([gpt2_byte_decoder[t] for t in parts[1]]),
             ))
 
-tokenizer = Tokenizer(vocab, merges, special_tokens=["<|endoftext|>"])
+tokenizers = {
+    "with regex": TokenizerWithRegex(vocab, merges, special_tokens=["<|endoftext|>"]),
+    "no regex": TokenizerNoRegex(vocab, merges, special_tokens=["<|endoftext|>"]),
+}
 
 
 while True:
@@ -35,10 +38,12 @@ while True:
     except (EOFError, KeyboardInterrupt):
         break
 
-    ids = tokenizer.encode(text)
-    tokens = [tokenizer.decode([i]) for i in ids]
+    for name, tokenizer in tokenizers.items():
+        ids = tokenizer.encode(text)
+        tokens = [tokenizer.decode([i]) for i in ids]
 
-    print(f"Token IDs:  {ids}")
-    print(f"Tokens:     {tokens}")
-    print(f"Decoded:    {tokenizer.decode(ids)}")
-    print(f"Token 数量: {len(ids)}")
+        print(f"\n[{name}]")
+        print(f"Token IDs:  {ids}")
+        print(f"Tokens:     {tokens}")
+        print(f"Decoded:    {tokenizer.decode(ids)}")
+        print(f"Token 数量: {len(ids)}")

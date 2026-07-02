@@ -9,6 +9,7 @@ import psutil
 import pytest
 import tiktoken
 
+from cs336_basics.tokenizer import Tokenizer, TokenizerNoRegex, TokenizerWithRegex
 from .adapters import get_tokenizer
 from .common import FIXTURES_PATH, gpt2_bytes_to_unicode
 
@@ -40,6 +41,7 @@ def get_tokenizer_from_vocab_merges_path(
     vocab_path: str | os.PathLike,
     merges_path: str | os.PathLike,
     special_tokens: list[str] | None = None,
+    tokenizer_cls=TokenizerWithRegex,
 ):
     gpt2_byte_decoder = {v: k for k, v in gpt2_bytes_to_unicode().items()}
     with open(vocab_path) as vocab_f:
@@ -71,7 +73,9 @@ def get_tokenizer_from_vocab_merges_path(
         )
         for merge_token_1, merge_token_2 in gpt2_bpe_merges
     ]
-    return get_tokenizer(vocab, merges, special_tokens)
+    if tokenizer_cls is Tokenizer:
+        return get_tokenizer(vocab, merges, special_tokens)
+    return tokenizer_cls(vocab, merges, special_tokens)
 
 
 def test_roundtrip_empty():
@@ -188,6 +192,22 @@ def test_ascii_string_matches_tiktoken():
 
     assert tokenizer.decode(ids) == test_string
     assert reference_tokenizer.decode(reference_ids) == test_string
+
+
+def test_regex_and_no_regex_tokenizers_are_separate_encode_variants():
+    vocab = {0: b"a", 1: b"1", 2: b"a1"}
+    merges = [(b"a", b"1")]
+    regex_tokenizer = TokenizerWithRegex(vocab, merges)
+    no_regex_tokenizer = TokenizerNoRegex(vocab, merges)
+    test_string = "a1"
+
+    regex_ids = regex_tokenizer.encode(test_string)
+    no_regex_ids = no_regex_tokenizer.encode(test_string)
+
+    assert regex_ids == [0, 1]
+    assert no_regex_ids == [2]
+    assert regex_tokenizer.decode(regex_ids) == test_string
+    assert no_regex_tokenizer.decode(no_regex_ids) == test_string
 
 
 def test_roundtrip_unicode_string():

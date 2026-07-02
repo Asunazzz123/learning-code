@@ -2,7 +2,14 @@ import re
 import os
 import regex
 from collections import OrderedDict
-class Tokenizer:
+
+
+GPT2_PRETOKEN_PATTERN = regex.compile(
+    r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
+)
+
+
+class _BaseTokenizer:
     def __init__(self,vocab,merges,special_tokens = None):
         """Args:
         vocab (dict[int, bytes]): The tokenizer vocabulary, a mapping from int (token ID in the vocabulary)
@@ -17,20 +24,25 @@ class Tokenizer:
         self.special_tokens = special_tokens or []
         self.byte_to_id = {v: k for k, v in vocab.items()}
         self.merge_ranks_bytes = {pair[0]+pair[1]: rank for rank, pair in enumerate(merges)}
-    
-    
-    def _token_split_special_token(self,text: str) -> list[tuple[bytes,bytes]]:
+        self._special_token_to_id = {
+            token: self.byte_to_id[token.encode("utf-8")]
+            for token in self.special_tokens
+            if token.encode("utf-8") in self.byte_to_id
+        }
+
+    def _token_split_special_token(self,text: str) -> list[tuple[str,bool]]:
         if not self.special_tokens:
             return [(text, False)]
-        pattern = "(" + "|".join(re.escape(token) for token in self.special_tokens) + ")"
+        sorted_special_tokens = sorted(self.special_tokens, key=len, reverse=True)
+        pattern = "(" + "|".join(re.escape(token) for token in sorted_special_tokens) + ")"
         parts = re.split(pattern, text)
-        special_set = set(self.special_tokens)
+        special_set = set(sorted_special_tokens)
         return [
             (part, part in special_set)
             for part in parts
             if part != ""
         ]
-    
+
     def _bpe_encoder(self,raw_byte: bytes):
         tokens = [bytes([b]) for b in raw_byte]
 
@@ -42,7 +54,7 @@ class Tokenizer:
 
             if not candidate:
                 break
-            
+
             best_pair = min(candidate, key = lambda pair: self.merge_ranks_bytes[pair])
 
             new_tokens = []
@@ -56,32 +68,55 @@ class Tokenizer:
                     i += 1
             tokens = new_tokens
         return tokens
-                
-            
+
+    def _encode_piece(self, piece: str) -> list[int]:
+        token_bytes = piece.encode("utf-8")
+        tokens = self._bpe_encoder(token_bytes)
+        return [self.byte_to_id[token] for token in tokens]
 
     def encode(self,text: str) -> list[int]:
         token_ids = []
         for piece, is_special in self._token_split_special_token(text):
             if piece == "":
                 continue
-            
+
             if is_special:
-                token_bytes = piece.encode("utf-8")
-                token_ids.append(self.byte_to_id[token_bytes])
-            
+                token_ids.append(self._special_token_to_id[piece])
+
             else:
-                token_bytes = piece.encode("utf-8")
-                tokens = self._bpe_encoder(token_bytes)
-                token_ids.extend(self.byte_to_id[token] for token in tokens)
+                token_ids.extend(self._encode_piece(piece))
         return token_ids
-    
+
 
         # pass
+
+    def encode_iterable(self, iterable):
+        for text in iterable:
+            yield from self.encode(text)
 
     def decode(self,ids: list[int]) -> str:
         raw_bytes = b"".join(self.vocab[token_id] for token_id in ids)
         return raw_bytes.decode("utf-8", errors="replace")
         # pass
+
+
+class TokenizerNoRegex(_BaseTokenizer):
+    """BPE tokenizer that applies BPE directly to each non-special text span."""
+
+
+class TokenizerWithRegex(_BaseTokenizer):
+    """GPT-2-style BPE tokenizer with regex pre-tokenization."""
+
+    def _encode_piece(self, piece: str) -> list[int]:
+        token_ids = []
+        for match in GPT2_PRETOKEN_PATTERN.finditer(piece):
+            token_bytes = match.group().encode("utf-8")
+            tokens = self._bpe_encoder(token_bytes)
+            token_ids.extend(self.byte_to_id[token] for token in tokens)
+        return token_ids
+
+
+Tokenizer = TokenizerWithRegex
 
 
 
@@ -105,10 +140,9 @@ def train(
     else:
         chunks = [text]
 
-    pat = regex.compile(r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
     word_counts = {}
     for chunk in chunks:
-        for match in pat.finditer(chunk):
+        for match in GPT2_PRETOKEN_PATTERN.finditer(chunk):
             token = tuple(bytes([b]) for b in match.group().encode("utf-8"))
             word_counts[token] = word_counts.get(token, 0) + 1
 
