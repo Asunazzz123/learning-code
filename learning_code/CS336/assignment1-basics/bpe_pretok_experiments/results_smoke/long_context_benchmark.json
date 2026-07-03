@@ -1,0 +1,84 @@
+[
+  {
+    "context_chars": 1024,
+    "variants": [
+      {
+        "name": "with_regex",
+        "char_count": 1024,
+        "byte_count": 1024,
+        "token_count": 621,
+        "bytes_per_token": 1.6489533011272142,
+        "encode": {
+          "min_s": 0.0027618330204859376,
+          "median_s": 0.0027618330204859376,
+          "mean_s": 0.0027618330204859376
+        },
+        "decode": {
+          "min_s": 4.1541061364114285e-05,
+          "median_s": 4.1541061364114285e-05,
+          "mean_s": 4.1541061364114285e-05
+        },
+        "roundtrip_ok": true
+      },
+      {
+        "name": "without_regex",
+        "char_count": 1024,
+        "byte_count": 1024,
+        "token_count": 620,
+        "bytes_per_token": 1.6516129032258065,
+        "encode": {
+          "min_s": 0.005636082962155342,
+          "median_s": 0.005636082962155342,
+          "mean_s": 0.005636082962155342
+        },
+        "decode": {
+          "min_s": 5.8750039897859097e-05,
+          "median_s": 5.8750039897859097e-05,
+          "mean_s": 5.8750039897859097e-05
+        },
+        "roundtrip_ok": true
+      }
+    ]
+  },
+  {
+    "context_chars": 4096,
+    "variants": [
+      {
+        "name": "with_regex",
+        "char_count": 4096,
+        "byte_count": 4096,
+        "token_count": 2620,
+        "bytes_per_token": 1.5633587786259542,
+        "encode": {
+          "min_s": 0.0032742080511525273,
+          "median_s": 0.0032742080511525273,
+          "mean_s": 0.0032742080511525273
+        },
+        "decode": {
+          "min_s": 0.0002405000850558281,
+          "median_s": 0.0002405000850558281,
+          "mean_s": 0.0002405000850558281
+        },
+        "roundtrip_ok": true
+      },
+      {
+        "name": "without_regex",
+        "char_count": 4096,
+        "byte_count": 4096,
+        "token_count": 2598,
+        "bytes_per_token": 1.5765973826020014,
+        "encode": {
+          "min_s": 0.03300770791247487,
+          "median_s": 0.03300770791247487,
+          "mean_s": 0.03300770791247487
+        },
+        "decode": {
+          "min_s": 0.00013037491589784622,
+          "median_s": 0.00013037491589784622,
+          "mean_s": 0.00013037491589784622
+        },
+        "roundtrip_ok": true
+      }
+    ]
+  }
+]

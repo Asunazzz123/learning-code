@@ -1,0 +1,355 @@
+{
+  "backend": "cpu_reference_bpe",
+  "config": {
+    "context_lengths": [
+      32,
+      96,
+      256
+    ],
+    "repeats": 2,
+    "parallel_workers": 2,
+    "parallel_backend": "thread",
+    "chunk_count": 4,
+    "output_dir": "results",
+    "train_vocab_size": 280,
+    "train_input_limit": 256
+  },
+  "results": [
+    {
+      "phase": "train",
+      "variant": "with_pretokenizer_serial",
+      "context_chars": 79,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 0.00040549994446337223,
+        "median_s": 0.0006311044562608004,
+        "mean_s": 0.0006311044562608004
+      },
+      "training": {
+        "span_count": 15,
+        "initial_word_count": 11,
+        "byte_count": 79,
+        "merge_count": 24,
+        "vocab_size": 280
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "with_pretokenizer_serial",
+      "context_chars": 32,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 3.6624958738684654e-05,
+        "median_s": 4.293752135708928e-05,
+        "mean_s": 4.293752135708928e-05
+      },
+      "encoding": {
+        "span_count": 7,
+        "byte_count": 32,
+        "token_count": 14,
+        "bytes_per_token": 2.2857142857142856,
+        "checksum": 2045228522595869867
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "with_pretokenizer_serial",
+      "context_chars": 96,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 9.125005453824997e-05,
+        "median_s": 9.47709777392447e-05,
+        "mean_s": 9.47709777392447e-05
+      },
+      "encoding": {
+        "span_count": 18,
+        "byte_count": 96,
+        "token_count": 38,
+        "bytes_per_token": 2.526315789473684,
+        "checksum": 2337483611358832425
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "with_pretokenizer_serial",
+      "context_chars": 256,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 0.00022604106925427914,
+        "median_s": 0.00022822857135906816,
+        "mean_s": 0.00022822857135906816
+      },
+      "encoding": {
+        "span_count": 48,
+        "byte_count": 256,
+        "token_count": 106,
+        "bytes_per_token": 2.4150943396226414,
+        "checksum": 12799645170417919906
+      }
+    },
+    {
+      "phase": "train",
+      "variant": "without_pretokenizer_serial",
+      "context_chars": 79,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 0.00037350005004554987,
+        "median_s": 0.0003791250637732446,
+        "mean_s": 0.0003791250637732446
+      },
+      "training": {
+        "span_count": 1,
+        "initial_word_count": 1,
+        "byte_count": 79,
+        "merge_count": 24,
+        "vocab_size": 280
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "without_pretokenizer_serial",
+      "context_chars": 32,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 7.525004912167788e-05,
+        "median_s": 7.750000804662704e-05,
+        "mean_s": 7.750000804662704e-05
+      },
+      "encoding": {
+        "span_count": 1,
+        "byte_count": 32,
+        "token_count": 11,
+        "bytes_per_token": 2.909090909090909,
+        "checksum": 12759995203531692971
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "without_pretokenizer_serial",
+      "context_chars": 96,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 0.0002418330404907465,
+        "median_s": 0.00024874956579878926,
+        "mean_s": 0.00024874956579878926
+      },
+      "encoding": {
+        "span_count": 1,
+        "byte_count": 96,
+        "token_count": 37,
+        "bytes_per_token": 2.5945945945945947,
+        "checksum": 15408779917081209901
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "without_pretokenizer_serial",
+      "context_chars": 256,
+      "repeats": 2,
+      "parallel_workers": 1,
+      "parallel_backend": "serial",
+      "chunk_count": 1,
+      "timings": {
+        "min_s": 0.0005977920955047011,
+        "median_s": 0.000611958559602499,
+        "mean_s": 0.000611958559602499
+      },
+      "encoding": {
+        "span_count": 1,
+        "byte_count": 256,
+        "token_count": 97,
+        "bytes_per_token": 2.6391752577319587,
+        "checksum": 14819893722165151342
+      }
+    },
+    {
+      "phase": "train",
+      "variant": "with_pretokenizer_parallel",
+      "context_chars": 79,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.0006625000387430191,
+        "median_s": 0.0007231250638142228,
+        "mean_s": 0.0007231250638142228
+      },
+      "training": {
+        "span_count": 18,
+        "initial_word_count": 12,
+        "byte_count": 79,
+        "merge_count": 24,
+        "vocab_size": 280
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "with_pretokenizer_parallel",
+      "context_chars": 32,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.0002129159402102232,
+        "median_s": 0.00022024946520105004,
+        "mean_s": 0.00022024946520105004
+      },
+      "encoding": {
+        "span_count": 10,
+        "byte_count": 32,
+        "token_count": 16,
+        "bytes_per_token": 2.0,
+        "checksum": 15966232290159461611
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "with_pretokenizer_parallel",
+      "context_chars": 96,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.00030149996746331453,
+        "median_s": 0.0003093124832957983,
+        "mean_s": 0.0003093124832957983
+      },
+      "encoding": {
+        "span_count": 21,
+        "byte_count": 96,
+        "token_count": 39,
+        "bytes_per_token": 2.4615384615384617,
+        "checksum": 2210661540357227161
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "with_pretokenizer_parallel",
+      "context_chars": 256,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.00044350000098347664,
+        "median_s": 0.000460583483800292,
+        "mean_s": 0.000460583483800292
+      },
+      "encoding": {
+        "span_count": 51,
+        "byte_count": 256,
+        "token_count": 110,
+        "bytes_per_token": 2.327272727272727,
+        "checksum": 9617691239630029922
+      }
+    },
+    {
+      "phase": "train",
+      "variant": "without_pretokenizer_parallel",
+      "context_chars": 79,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.0005569170461967587,
+        "median_s": 0.000565188005566597,
+        "mean_s": 0.000565188005566597
+      },
+      "training": {
+        "span_count": 4,
+        "initial_word_count": 4,
+        "byte_count": 79,
+        "merge_count": 24,
+        "vocab_size": 280
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "without_pretokenizer_parallel",
+      "context_chars": 32,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.0001640829723328352,
+        "median_s": 0.0001725209876894951,
+        "mean_s": 0.0001725209876894951
+      },
+      "encoding": {
+        "span_count": 4,
+        "byte_count": 32,
+        "token_count": 16,
+        "bytes_per_token": 2.0,
+        "checksum": 9780537409055954701
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "without_pretokenizer_parallel",
+      "context_chars": 96,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.00032008299604058266,
+        "median_s": 0.0003218125202693045,
+        "mean_s": 0.0003218125202693045
+      },
+      "encoding": {
+        "span_count": 4,
+        "byte_count": 96,
+        "token_count": 35,
+        "bytes_per_token": 2.742857142857143,
+        "checksum": 16663772868635439737
+      }
+    },
+    {
+      "phase": "encode",
+      "variant": "without_pretokenizer_parallel",
+      "context_chars": 256,
+      "repeats": 2,
+      "parallel_workers": 2,
+      "parallel_backend": "thread",
+      "chunk_count": 4,
+      "timings": {
+        "min_s": 0.0008062920533120632,
+        "median_s": 0.0008070209878496826,
+        "mean_s": 0.0008070209878496826
+      },
+      "encoding": {
+        "span_count": 4,
+        "byte_count": 256,
+        "token_count": 100,
+        "bytes_per_token": 2.56,
+        "checksum": 13752337609070185172
+      }
+    }
+  ]
+}

@@ -124,6 +124,7 @@ def train(
     input_path: str | os.PathLike,
     vocab_size: int,
     special_tokens: list[str],
+    use_pretokenization: bool = True,
     **kwargs,
 ):
     with open(input_path, encoding="utf-8") as f:
@@ -142,8 +143,12 @@ def train(
 
     word_counts = {}
     for chunk in chunks:
-        for match in GPT2_PRETOKEN_PATTERN.finditer(chunk):
-            token = tuple(bytes([b]) for b in match.group().encode("utf-8"))
+        if use_pretokenization:
+            pieces = (match.group() for match in GPT2_PRETOKEN_PATTERN.finditer(chunk))
+        else:
+            pieces = (chunk,) if chunk else ()
+        for piece in pieces:
+            token = tuple(bytes([b]) for b in piece.encode("utf-8"))
             word_counts[token] = word_counts.get(token, 0) + 1
 
     merges = []
