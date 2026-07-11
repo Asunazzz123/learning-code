@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# ruff: noqa: F722
+
 import json
 import logging
 import math
@@ -31,7 +33,7 @@ class Linear(nn.Module):
 
         super().__init__()
         std = math.sqrt(2 / (d_in + d_out))
-        self.weight: Float[Tensor, " d_out d_in"] = nn.Parameter(
+        self.weight: Float[Tensor, "d_out d_in"] = nn.Parameter(  # pyright: ignore[reportInvalidTypeForm]
             nn.init.trunc_normal_(torch.empty(d_out, d_in), std=std, a=-3 * std, b=3 * std), requires_grad=True
         )
 
