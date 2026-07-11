@@ -532,3 +532,29 @@ class CausalMultiHeadSelfAttention(nn.Module):
 
 def silu(x: torch.Tensor):
     return x * torch.sigmoid(x)
+
+
+
+class transformer_lm(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        d_ff: int,
+        num_heads: int,
+        position_encoder: RotaryEmbedding | None,
+    ):
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.num_heads = num_heads
+        self.position_encoder = position_encoder
+
+        self.d_k = d_model // num_heads
+        
+
+    
+    def forward(
+        self
+    ):
+        
+        
+        
