@@ -1,3 +1,10 @@
+"""
+Using pipeline to display ip location and isp
+Example:
+    traceroute claude.ai | python trace.py
+"""
+
+
 import csv
 import ipaddress
 import json

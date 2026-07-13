@@ -542,11 +542,15 @@ class transformer_lm(nn.Module):
         d_ff: int,
         num_heads: int,
         position_encoder: RotaryEmbedding | None,
+        vocab_size: int,
+        context_length: int
     ):
         self.d_model = d_model
         self.d_ff = d_ff
         self.num_heads = num_heads
         self.position_encoder = position_encoder
+        self.vocab_size = vocab_size
+        self.context_length = context_length
 
         self.d_k = d_model // num_heads
         
@@ -555,6 +559,7 @@ class transformer_lm(nn.Module):
     def forward(
         self
     ):
+        
         
         
         

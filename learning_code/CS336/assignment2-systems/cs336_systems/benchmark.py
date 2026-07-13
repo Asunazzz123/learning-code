@@ -43,14 +43,14 @@ class ModelSize(ModelParams):
 
 class Benchmarking(ModelParams):
     def __init__(self,size):
-        ModelSize(size).params()
+        super().__init__(size)
 
     def __model__(self):
         Transformer = TransformerBlock(
             self.d_model,
             self.num_heads,
             self.d_ff,
-            self.
+            self.position_encoder
         )
         return Transformer
     
