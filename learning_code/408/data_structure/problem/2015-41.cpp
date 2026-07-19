@@ -7,7 +7,7 @@ struct node
     node* next;
 };
 
-int abs(int n){
+int _abs(int n){
     if (n <= 0){
         return -n ;
     }
@@ -20,7 +20,7 @@ void DeleteSameNode(node* head, int n){
     while (tmp -> next != nullptr)
     {
         node* target = tmp -> next;
-        int val = abs(tmp -> data);
+        int val = _abs(tmp -> data);
         if (!samenode[val]){
             samenode[val] = true;
             tmp = tmp -> next;
