@@ -21,8 +21,41 @@ int MajorElem(std::vector<int> a,int n){
     return -1;
 }
 
+
+int MajorElem_BoyerMoore(std::vector<int> a){
+    int candidate = 0;
+    int count = 0;
+    // 选择最多元素
+    for (int x : a){
+        if (count == 0){
+            candidate = x;
+            count = 1;
+        }
+        else if (x == candidate){
+            count ++;
+        }
+        else{
+            count --;
+        }
+    }
+
+    // 遍历数组求出最多元素的出现次数
+    count = 0;
+    for (int x : a){
+        if (x == candidate){
+            count ++;
+        }
+    }
+    if (count > a.size()/2){
+        return candidate;
+    }
+    return -1;
+}
+
+
 int main(){
     std::vector<int> test_list = {1, 2, 3, 4, 4, 4, 4};
-    int majorelem = MajorElem(test_list, test_list.size());
+    // int majorelem = MajorElem(test_list, test_list.size());
+    int majorelem = MajorElem_BoyerMoore(test_list);
     std::cout << majorelem << std::endl;
 }
