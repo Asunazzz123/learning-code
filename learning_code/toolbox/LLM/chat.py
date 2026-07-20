@@ -1,13 +1,12 @@
+import json
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-PROMPT = "hello"
 
-
-def main() -> None:
+def main(prompt: str) -> None:
     env_path = Path(__file__).with_name(".env")
     load_dotenv(env_path)
 
@@ -16,14 +15,21 @@ def main() -> None:
         base_url=os.getenv("OPENAI_BASE_URL"),
     )
 
-    response = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL"),
-        messages=[{"role": "user", "content": PROMPT}],
-    )
+    request_body = {
+        "model": os.getenv("OPENAI_MODEL"),
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    print("\n===== OpenAI JSON Request =====")
+    print(json.dumps(request_body, ensure_ascii=False, indent=2))
+    
+
+    response = client.chat.completions.create(**request_body)
 
     content = response.choices[0].message.content
     print(content or "[模型返回了空内容]")
 
 
 if __name__ == "__main__":
-    main()
+    prompt = input("Prompt: ")
+    main(prompt)
