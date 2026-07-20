@@ -28,7 +28,9 @@ struct node{
 };
 
 
-int mindist(std::vector<int> set1, std::vector<int> set2, std::vector<int> set3){
+int mindist(const std::vector<int>& set1,
+            const std::vector<int>& set2,
+            const std::vector<int>& set3){
     int n1 = set1.size();
     int n2 = set2.size();
     int n3 = set3.size();
