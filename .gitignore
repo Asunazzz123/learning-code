@@ -1,3 +1,6 @@
 .vscode
 *.local.md
 .DS_Store
+
+# Local LLM credentials
+learning_code/toolbox/LLM/.env

@@ -61,7 +61,6 @@ int main(){
     std::vector<int> set1 = {-1,0,9};
     std::vector<int> set2 = {-25,-10,10,11};
     std::vector<int> set3 = {2,9,17,30,41};
-    
     int min  = mindist(set1,set2,set3);
     std::cout << min << std::endl;
 }
