@@ -1,4 +1,5 @@
 from cs336_basics.model import BasicsTransformerLM
+from cs336_basics.nn_utils import cross_entropy
 import timeit
 import torch
 import numpy as np
@@ -58,6 +59,7 @@ class Benchmarking(ModelSize):
         )
         Transformer.to(device=self.device)
         return Transformer
+    
 
     def data_generate(self):
         gen = torch.randint(
@@ -94,7 +96,29 @@ class Benchmarking(ModelSize):
                 time.append(end - start)
 
         elif mode == "forward and backward":
-               pass
+    
+            for i in range(wstep):
+                model.zero_grad()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                logits = model(x)
+                loss = cross_entropy(logits,y)
+                loss.backward()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+            for i in range(nstep):
+                model.zero_grad()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                start = timeit.default_timer()
+                logits = model(x)
+                loss = cross_entropy(logits,y)
+                loss.backward()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device) 
+                end = timeit.default_timer()
+                time.append(end - start)
+
         elif mode == "forward and backward with optimizer":
                pass
         else:
