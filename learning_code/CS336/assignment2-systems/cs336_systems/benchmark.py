@@ -1,5 +1,6 @@
 from cs336_basics.model import BasicsTransformerLM
 from cs336_basics.nn_utils import cross_entropy
+from cs336_basics.optimizer import AdamW
 import timeit
 import torch
 import numpy as np
@@ -120,7 +121,30 @@ class Benchmarking(ModelSize):
                 time.append(end - start)
 
         elif mode == "forward and backward with optimizer":
-               pass
+            optimizer = AdamW(model.parameters())
+            for i in range(wstep):
+                optimizer.zero_grad()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                logits = model(x)
+                loss = cross_entropy(logits,y)
+                loss.backward()
+                optimizer.step()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+            for i in range(nstep):
+                optimizer.zero_grad()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                start = timeit.default_timer()
+                logits = model(x)
+                loss = cross_entropy(logits,y)
+                loss.backward()
+                optimizer.step()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device) 
+                end = timeit.default_timer()
+                time.append(end - start)
         else:
                raise(IndexError("Mode Error"))
         time = np.array(time,dtype=np.float64)
