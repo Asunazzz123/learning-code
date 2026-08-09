@@ -40,7 +40,7 @@ class ModelSize(ModelParams):
                     self.d_ff = 12288
                     self.num_layers = 50
                     self.num_heads = 36
-        
+
 
 
 
@@ -60,7 +60,7 @@ class Benchmarking(ModelSize):
         )
         Transformer.to(device=self.device)
         return Transformer
-    
+
 
     def data_generate(self):
         gen = torch.randint(
@@ -90,14 +90,22 @@ class Benchmarking(ModelSize):
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
                 start = timeit.default_timer()
-                logits = model(x)
-                if self.device.type == "cuda":
-                    torch.cuda.synchronize(device=self.device) 
+                if (i == 0): # Nsight captures 1st forwards running.
+                    with torch.cuda.nvtx.range("model_step"):
+                        with torch.cuda.nvtx.range("model_forward"):
+                            logits = model(x)
+                            if self.device.type == "cuda":
+                                torch.cuda.synchronize(device=self.device)
+                else:
+                    logits = model(x)
+                    if self.device.type == "cuda":
+                        torch.cuda.synchronize(device=self.device)
+
                 end = timeit.default_timer()
                 time.append(end - start)
 
         elif mode == "forward and backward":
-    
+
             for i in range(wstep):
                 model.zero_grad()
                 if self.device.type == "cuda":
@@ -112,11 +120,24 @@ class Benchmarking(ModelSize):
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
                 start = timeit.default_timer()
-                logits = model(x)
-                loss = cross_entropy(logits,y)
-                loss.backward()
-                if self.device.type == "cuda":
-                    torch.cuda.synchronize(device=self.device) 
+                if (i == 0):
+                    with torch.cuda.nvtx.range("model_step"):
+                        with torch.cuda.nvtx.range("model_forward"):
+                            logits = model(x)
+                        with torch.cuda.nvtx.range("model_loss_backward"):
+                            loss = cross_entropy(logits,y)
+                            loss.backward()
+                        if self.device.type == "cuda":
+                            torch.cuda.synchronize(device=self.device)
+                else:
+                    logits = model(x)
+                    loss = cross_entropy(logits,y)
+                    loss.backward()
+                    if self.device.type == "cuda":
+                        torch.cuda.synchronize(device=self.device)
+
+
+
                 end = timeit.default_timer()
                 time.append(end - start)
 
@@ -137,12 +158,27 @@ class Benchmarking(ModelSize):
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
                 start = timeit.default_timer()
-                logits = model(x)
-                loss = cross_entropy(logits,y)
-                loss.backward()
-                optimizer.step()
-                if self.device.type == "cuda":
-                    torch.cuda.synchronize(device=self.device) 
+                if (i == 0):
+                    with torch.cuda.nvtx.range("model_step"):
+
+                        with torch.cuda.nvtx.range("model_forward"):
+                            logits = model(x)
+                        with torch.cuda.nvtx.range("model_backward"):
+                            loss = cross_entropy(logits,y)
+                            loss.backward()
+                        with torch.cuda.nvtx.range("optimizer_gradient_decent"):
+                            optimizer.step()
+                        if self.device.type == "cuda":
+                            torch.cuda.synchronize(device=self.device)
+                else:
+                    logits = model(x)
+                    loss = cross_entropy(logits,y)
+                    loss.backward()
+                    optimizer.step()
+                    if self.device.type == "cuda":
+                        torch.cuda.synchronize(device=self.device)
+
+
                 end = timeit.default_timer()
                 time.append(end - start)
         else:
@@ -151,13 +187,10 @@ class Benchmarking(ModelSize):
         mean = time.mean()
         std = time.std()
         return mean,std
-        
-        
 
 
 
 
-    
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -166,6 +199,5 @@ if __name__ == "__main__":
     print(x.dtype)
     print(x.shape)
     print(y.shape)
-    
 
 
