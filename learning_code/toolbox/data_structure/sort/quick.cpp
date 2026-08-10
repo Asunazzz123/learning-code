@@ -1,6 +1,8 @@
 #include<iostream>
 #include<vector>
-#include<random>
+
+
+
 int partition(std::vector<int>& a, int left, int right) {
     int pivotIndex = left + std::rand() % (right - left + 1);
     std::swap(a[pivotIndex], a[right]);
