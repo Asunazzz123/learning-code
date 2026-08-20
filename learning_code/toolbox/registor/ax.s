@@ -17,10 +17,15 @@ _main:
     add x0, x0, format@PAGEOFF
     bl _printf
 
+
+
     add sp, sp, #16 // 释放16字节空间
     mov w0, #0
     ldp x29, x30, [sp], #16
     ret
+
+    loop_forever:
+        b loop_forever
 
 .section __TEXT,__cstring,cstring_literals
 format:

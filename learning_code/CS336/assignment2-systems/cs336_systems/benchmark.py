@@ -80,17 +80,17 @@ class Benchmarking(ModelSize):
         x,y = self.data_generate()
         time = []
         if mode == "forward-only":
-            for i in range(wstep):
+            for epoch in range(wstep):
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
                 logits = model(x)
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
-            for i in range(nstep):
+            for epoch in range(nstep):
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
                 start = timeit.default_timer()
-                if (i == 0): # Nsight captures 1st forwards running.
+                if (epoch == 0): # Nsight captures 1st forwards running.
                     with torch.cuda.nvtx.range("model_step"):
                         with torch.cuda.nvtx.range("model_forward"):
                             logits = model(x)
@@ -106,7 +106,7 @@ class Benchmarking(ModelSize):
 
         elif mode == "forward and backward":
 
-            for i in range(wstep):
+            for epoch in range(wstep):
                 model.zero_grad()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
@@ -115,12 +115,12 @@ class Benchmarking(ModelSize):
                 loss.backward()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
-            for i in range(nstep):
+            for epoch in range(nstep):
                 model.zero_grad()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
                 start = timeit.default_timer()
-                if (i == 0):
+                if (epoch == 0):
                     with torch.cuda.nvtx.range("model_step"):
                         with torch.cuda.nvtx.range("model_forward"):
                             logits = model(x)
@@ -143,7 +143,7 @@ class Benchmarking(ModelSize):
 
         elif mode == "forward and backward with optimizer":
             optimizer = AdamW(model.parameters())
-            for i in range(wstep):
+            for epoch in range(wstep):
                 optimizer.zero_grad()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
@@ -153,12 +153,12 @@ class Benchmarking(ModelSize):
                 optimizer.step()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
-            for i in range(nstep):
+            for epoch in range(nstep):
                 optimizer.zero_grad()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
                 start = timeit.default_timer()
-                if (i == 0):
+                if (epoch == 0):
                     with torch.cuda.nvtx.range("model_step"):
 
                         with torch.cuda.nvtx.range("model_forward"):
