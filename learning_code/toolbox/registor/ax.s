@@ -22,7 +22,8 @@ _main:
     add sp, sp, #16 // 释放16字节空间
     mov w0, #0
     ldp x29, x30, [sp], #16
-    ret
+    b loop_forever
+
 
     loop_forever:
         b loop_forever
