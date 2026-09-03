@@ -4,6 +4,8 @@ from cs336_basics.optimizer import AdamW
 import timeit
 import torch
 import numpy as np
+import torch.nn as nn
+from torch.amp import autocast, GradScaler
 class ModelParams:
     d_model: int
     d_ff: int
@@ -41,7 +43,19 @@ class ModelSize(ModelParams):
                     self.num_layers = 50
                     self.num_heads = 36
 
+class ToyModel(nn.Module):
+    def __init__(self, in_features: int, out_features: int):
+        super().__init__()
+        self.fc1 = nn.Linear(in_features, 10, bias=False)
+        self.ln = nn.LayerNorm(10)
+        self.fc2 = nn.Linear(10, out_features, bias=False)
+        self.relu = nn.ReLU()
 
+    def forward(self, x):
+        x = self.relu(self.fc1(x))
+        x = self.ln(x)
+        x = self.fc2(x)
+        return x
 
 
 class Benchmarking(ModelSize):
@@ -49,17 +63,25 @@ class Benchmarking(ModelSize):
         super().__init__(size)
         self.device = device
         self.batch_size = batch_size
-    def __model__(self):
-        Transformer = BasicsTransformerLM(
-            self.vocab_size,
-            self.context_length,
-            self.d_model,
-            self.num_layers,
-            self.num_heads,
-            self.d_ff
-        )
-        Transformer.to(device=self.device)
-        return Transformer
+    def __model__(self,name):
+        if name == "transformer":
+            Transformer = BasicsTransformerLM(
+                self.vocab_size,
+                self.context_length,
+                self.d_model,
+                self.num_layers,
+                self.num_heads,
+                self.d_ff
+            )
+            Transformer.to(device=self.device)
+            return Transformer
+        if name == "toymodel":
+            model = ToyModel(
+                self.batch_size,
+                self.context_length
+            )
+            model.to(device=self.device)
+            return model
 
 
     def data_generate(self):
@@ -75,9 +97,9 @@ class Benchmarking(ModelSize):
         y = gen[:,1:]
         return x,y
 
-    def warmup_test(self,mode,wstep=5,nstep=10):
+    def warmup_test(self,mode,name:str,wstep=5,nstep=10):
         model = self.__model__()
-        x,y = self.data_generate()
+        x,y = self.data_generate(name)
         time = []
         if mode == "forward-only":
             for epoch in range(wstep):
@@ -187,6 +209,37 @@ class Benchmarking(ModelSize):
         mean = time.mean()
         std = time.std()
         return mean,std
+
+    def mix_precision_train(self,name:str ,lr: float, epochs: int):
+        """
+        混合精度训练实验
+        """
+        model = self.__model__(name)
+        time = []
+        x,y = self.data_generate()
+        optimizer = AdamW(optimizer = AdamW(model.parameters(),lr))
+         # 初始化gradscaler, 用于规避Mix precision training时的梯度下溢
+        scaler = GradScaler(device=self.device)
+        for epoch in range(epochs):
+            optimizer.zero_grad()
+            if self.device == "cuda":
+                torch.cuda.synchronize(device=device)
+            start = timeit.default_timer() # 创建计时器
+
+            with autocast(device_type=device,dtype=torch.float16):
+                logits = model(x)
+                loss = cross_entropy(logits,y)
+            # 反向传播
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
+            if self.device == "cuda":
+                torch.cuda.synchronize(device=device)
+            end = timeit.default_timer()
+
+            time.append(end-start)
+
 
 
 
