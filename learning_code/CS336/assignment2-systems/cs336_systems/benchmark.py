@@ -98,8 +98,8 @@ class Benchmarking(ModelSize):
         return x,y
 
     def warmup_test(self,mode,name:str,wstep=5,nstep=10):
-        model = self.__model__()
-        x,y = self.data_generate(name)
+        model = self.__model__(name)
+        x,y = self.data_generate()
         time = []
         if mode == "forward-only":
             for epoch in range(wstep):
@@ -217,16 +217,16 @@ class Benchmarking(ModelSize):
         model = self.__model__(name)
         time = []
         x,y = self.data_generate()
-        optimizer = AdamW(optimizer = AdamW(model.parameters(),lr))
+        optimizer = AdamW(model.parameters(),lr)
          # 初始化gradscaler, 用于规避Mix precision training时的梯度下溢
         scaler = GradScaler(device=self.device)
         for epoch in range(epochs):
             optimizer.zero_grad()
             if self.device == "cuda":
-                torch.cuda.synchronize(device=device)
+                torch.cuda.synchronize(device=self.device)
             start = timeit.default_timer() # 创建计时器
 
-            with autocast(device_type=device,dtype=torch.float16):
+            with autocast(device_type=self.device,dtype=torch.float16):
                 logits = model(x)
                 loss = cross_entropy(logits,y)
             # 反向传播
@@ -235,7 +235,7 @@ class Benchmarking(ModelSize):
             scaler.update()
 
             if self.device == "cuda":
-                torch.cuda.synchronize(device=device)
+                torch.cuda.synchronize(device=self.device)
             end = timeit.default_timer()
 
             time.append(end-start)
