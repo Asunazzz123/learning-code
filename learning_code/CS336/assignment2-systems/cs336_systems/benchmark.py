@@ -169,6 +169,7 @@ class Benchmarking(ModelSize):
                 optimizer.zero_grad()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
+            
                 logits = model(x)
                 loss = cross_entropy(logits,y)
                 loss.backward()
@@ -210,6 +211,147 @@ class Benchmarking(ModelSize):
         std = time.std()
         return mean,std
 
+
+    def warmup_test_mix_precision(self,name:str,mode:str, wstep=5,nstep=10,lr=10**-6):
+        model = self.__model__(name)
+        x,y = self.data_generate()
+        time = []
+        optimizer = AdamW(model.parameters(),lr)
+        # 初始化gradscaler, 用于规避Mix precision training时的梯度下溢
+        scaler = GradScaler(device=self.device)
+        if mode == "forward-only":
+            for epoch in range(wstep):
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                logits = model(x)
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+            for epoch in range(nstep):
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                start = timeit.default_timer()
+                if (epoch == 0): # Nsight captures 1st forwards running.
+                    with torch.cuda.nvtx.range("model_step"):
+                        with torch.cuda.nvtx.range("model_forward"):
+                            # BF16 进行前向计算
+                            with autocast(device_type=self.device, dtype=torch.bfloat16):
+                                logits = model(x)
+                            if self.device.type == "cuda":
+                                torch.cuda.synchronize(device=self.device)
+                else:
+                    with autocast(device_type=self.device, dtype=torch.bfloat16):
+                        logits = model(x)
+                    if self.device.type == "cuda":
+                        torch.cuda.synchronize(device=self.device)
+
+                end = timeit.default_timer()
+                time.append(end - start)
+
+        elif mode == "forward and backward":
+
+            for epoch in range(wstep):
+                model.zero_grad()
+
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+
+                with autocast(device_type=self.device,dtype=torch.bfloat16):
+                    logits = model(x)
+                    loss = cross_entropy(logits,y)
+
+                loss.backward()
+
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+
+
+            for epoch in range(nstep):
+                model.zero_grad()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                start = timeit.default_timer()
+                if (epoch == 0):
+                    with torch.cuda.nvtx.range("model_step"):
+                        with torch.cuda.nvtx.range("model_forward"):
+                            with autocast(device_type=self.device, dtype=torch.bfloat16):
+                                logits = model(x)
+                        with torch.cuda.nvtx.range("model_loss_backward"):
+                            # BF16 precision的 交叉熵计算
+                            with autocast(device_type=self.device, dtype=torch.bfloat16):
+                                loss = cross_entropy(logits,y)
+
+                            loss.backward()
+                        if self.device.type == "cuda":
+                            torch.cuda.synchronize(device=self.device)
+                else:
+                    with autocast(device_type=self.device, dtype=torch.bfloat16):
+                        logits = model(x)
+                        loss = cross_entropy(logits,y)
+                    loss.backward()
+                    if self.device.type == "cuda":
+                        torch.cuda.synchronize(device=self.device)
+
+
+
+                end = timeit.default_timer()
+                time.append(end - start)
+
+        elif mode == "forward and backward with optimizer":
+            for epoch in range(wstep):
+                optimizer.zero_grad()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                with autocast(device_type=self.device,dtype=torch.bfloat16):
+                    logits = model(x)
+                    loss = cross_entropy(logits,y)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+            for epoch in range(nstep):
+                optimizer.zero_grad()
+                if self.device.type == "cuda":
+                    torch.cuda.synchronize(device=self.device)
+                start = timeit.default_timer()
+                if (epoch == 0):
+                    with torch.cuda.nvtx.range("model_step"):
+
+                        with torch.cuda.nvtx.range("model_forward"):
+                            with autocast(device_type=self.device,dtype=torch.bfloat16):
+                                logits = model(x)
+                        with torch.cuda.nvtx.range("model_backward"):
+                            with autocast(device_type=self.device,dtype=torch.bfloat16):
+                                loss = cross_entropy(logits,y)
+                            scaler.scale(loss).backward()
+
+                        with torch.cuda.nvtx.range("optimizer_gradient_decent"):
+                            scaler.step(optimizer)
+                            scaler.update()
+                        if self.device.type == "cuda":
+                            torch.cuda.synchronize(device=self.device)
+                else:
+                    with autocast(device_type=self.device,dtype=torch.bfloat16):
+                        logits = model(x)
+                        loss = cross_entropy(logits,y)
+                    scaler.scale(loss).backward()
+                    scaler.step(optimizer)
+                    scaler.update()
+
+                    if self.device.type == "cuda":
+                        torch.cuda.synchronize(device=self.device)
+
+
+                end = timeit.default_timer()
+                time.append(end - start)
+        else:
+                raise(IndexError("Mode Error"))
+        time = np.array(time,dtype=np.float64)
+        mean = time.mean()
+        std = time.std()
+        return mean,std
+
     def mix_precision_train(self,name:str ,lr: float, epochs: int):
         """
         混合精度训练实验
@@ -226,7 +368,7 @@ class Benchmarking(ModelSize):
                 torch.cuda.synchronize(device=self.device)
             start = timeit.default_timer() # 创建计时器
 
-            with autocast(device_type=self.device,dtype=torch.float16):
+            with autocast(device_type=self.device,dtype=torch.bfloat16):
                 logits = model(x)
                 loss = cross_entropy(logits,y)
             # 反向传播
