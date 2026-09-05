@@ -44,18 +44,35 @@ class ModelSize(ModelParams):
                     self.num_heads = 36
 
 class ToyModel(nn.Module):
-    def __init__(self, in_features: int, out_features: int):
+    def __init__(self, in_features: int, out_features: int, device: torch.device):
         super().__init__()
         self.fc1 = nn.Linear(in_features, 10, bias=False)
         self.ln = nn.LayerNorm(10)
         self.fc2 = nn.Linear(10, out_features, bias=False)
         self.relu = nn.ReLU()
-
+        self.in_features = in_features
+        self.out_features = out_features
+        self.device = device
     def forward(self, x):
         x = self.relu(self.fc1(x))
         x = self.ln(x)
         x = self.fc2(x)
         return x
+
+    def data_generate_toymodel(self, batch_size: int):
+            x = torch.rand(
+                size = (batch_size,self.in_features),
+                dtype = torch.float,
+                device = self.device
+            )
+            y = torch.randint(
+                low = 0,
+                high = self.out_features,
+                size = (batch_size,),
+                dtype = torch.int64,
+                device = self.device
+            )
+            return x,y
 
 
 class Benchmarking(ModelSize):
@@ -63,7 +80,7 @@ class Benchmarking(ModelSize):
         super().__init__(size)
         self.device: torch.device = torch.device(device)
         self.batch_size = batch_size
-    def __model__(self,name):
+    def __model__(self,name,in_features: int| None, out_features: int | None):
         if name == "transformer":
             Transformer = BasicsTransformerLM(
                 self.vocab_size,
@@ -77,8 +94,9 @@ class Benchmarking(ModelSize):
             return Transformer
         if name == "toymodel":
             model = ToyModel(
-                self.batch_size,
-                self.context_length
+                in_features,
+                out_features,
+                self.device
             )
             model.to(device=self.device)
             return model
@@ -97,9 +115,24 @@ class Benchmarking(ModelSize):
         y = gen[:,1:]
         return x,y
 
-    def warmup_test(self,mode,name:str,wstep=5,nstep=10):
-        model = self.__model__(name)
-        x,y = self.data_generate()
+
+
+    def warmup_test(
+            self,
+            mode:str,
+            name:str,
+            in_features: int | None = None,
+            out_features: int | None = None,
+            wstep=5,
+            nstep=10
+        ):
+        model = self.__model__(name,in_features,out_features)
+        if name == "transformer":
+            x,y = self.data_generate()
+        elif name == "toymodel":
+            x,y = model.data_generate_toymodel(self.batch_size)
+        else:
+            raise NameError("Error model name")
         time = []
         if mode == "forward-only":
             for epoch in range(wstep):
@@ -212,18 +245,32 @@ class Benchmarking(ModelSize):
         return mean,std
 
 
-    def warmup_test_mix_precision(self,name:str,mode:str, wstep=5,nstep=10,lr=10**-6):
-        model = self.__model__(name)
-        x,y = self.data_generate()
+    def warmup_test_mix_precision(self,
+            name:str,
+            mode:str,
+            in_features: int| None = None,
+            out_features: int| None = None,
+            wstep=5,
+            nstep=10,
+            lr=10**-3
+        ):
+        model = self.__model__(name,in_features,out_features)
+        if name == "transformer":
+            x,y = self.data_generate()
+        elif name == "toymodel":
+            x,y = model.data_generate_toymodel(self.batch_size)
+        else:
+            raise NameError("Error model name")
         time = []
         optimizer = AdamW(model.parameters(),lr)
-        # 初始化gradscaler, 用于规避Mix precision training时的梯度下溢
-        scaler = GradScaler(device=self.device)
+
         if mode == "forward-only":
             for epoch in range(wstep):
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
-                logits = model(x)
+                with autocast(device_type=self.device.type, dtype=torch.bfloat16):
+                    logits = model(x)
+
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
             for epoch in range(nstep):
@@ -234,12 +281,12 @@ class Benchmarking(ModelSize):
                     with torch.cuda.nvtx.range("model_step"):
                         with torch.cuda.nvtx.range("model_forward"):
                             # BF16 进行前向计算
-                            with autocast(device_type=self.device, dtype=torch.bfloat16):
+                            with autocast(device_type=self.device.type, dtype=torch.bfloat16):
                                 logits = model(x)
                             if self.device.type == "cuda":
                                 torch.cuda.synchronize(device=self.device)
                 else:
-                    with autocast(device_type=self.device, dtype=torch.bfloat16):
+                    with autocast(device_type=self.device.type, dtype=torch.bfloat16):
                         logits = model(x)
                     if self.device.type == "cuda":
                         torch.cuda.synchronize(device=self.device)
@@ -255,7 +302,7 @@ class Benchmarking(ModelSize):
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
 
-                with autocast(device_type=self.device,dtype=torch.bfloat16):
+                with autocast(device_type=self.device.type,dtype=torch.bfloat16):
                     logits = model(x)
                     loss = cross_entropy(logits,y)
 
@@ -273,19 +320,20 @@ class Benchmarking(ModelSize):
                 if (epoch == 0):
                     with torch.cuda.nvtx.range("model_step"):
                         with torch.cuda.nvtx.range("model_forward"):
-                            with autocast(device_type=self.device, dtype=torch.bfloat16):
+                            with autocast(device_type=self.device.type, dtype=torch.bfloat16):
                                 logits = model(x)
                         with torch.cuda.nvtx.range("model_loss_backward"):
                             # BF16 precision的 交叉熵计算
-                            with autocast(device_type=self.device, dtype=torch.bfloat16):
+                            with autocast(device_type=self.device.type, dtype=torch.bfloat16):
                                 loss = cross_entropy(logits,y)
 
                             loss.backward()
                         if self.device.type == "cuda":
                             torch.cuda.synchronize(device=self.device)
                 else:
-                    with autocast(device_type=self.device, dtype=torch.bfloat16):
+                    with autocast(device_type=self.device.type, dtype=torch.bfloat16):
                         logits = model(x)
+                    with autocast(device_type=self.device.type, dtype=torch.bfloat16):
                         loss = cross_entropy(logits,y)
                     loss.backward()
                     if self.device.type == "cuda":
@@ -301,12 +349,13 @@ class Benchmarking(ModelSize):
                 optimizer.zero_grad()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
-                with autocast(device_type=self.device,dtype=torch.bfloat16):
+                with autocast(device_type=self.device.type,dtype=torch.bfloat16):
                     logits = model(x)
+                with autocast(device_type=self.device.type,dtype=torch.bfloat16):
                     loss = cross_entropy(logits,y)
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
+                loss.backward()
+                optimizer.step()
+
 
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
@@ -319,25 +368,26 @@ class Benchmarking(ModelSize):
                     with torch.cuda.nvtx.range("model_step"):
 
                         with torch.cuda.nvtx.range("model_forward"):
-                            with autocast(device_type=self.device,dtype=torch.bfloat16):
+                            with autocast(device_type=self.device.type,dtype=torch.bfloat16):
                                 logits = model(x)
                         with torch.cuda.nvtx.range("model_backward"):
-                            with autocast(device_type=self.device,dtype=torch.bfloat16):
+                            with autocast(device_type=self.device.type,dtype=torch.bfloat16):
                                 loss = cross_entropy(logits,y)
-                            scaler.scale(loss).backward()
+                            loss.backward()
 
                         with torch.cuda.nvtx.range("optimizer_gradient_decent"):
-                            scaler.step(optimizer)
-                            scaler.update()
+                            optimizer.step()
                         if self.device.type == "cuda":
                             torch.cuda.synchronize(device=self.device)
                 else:
-                    with autocast(device_type=self.device,dtype=torch.bfloat16):
+                    with autocast(device_type=self.device.type,dtype=torch.bfloat16):
                         logits = model(x)
+
+                    with autocast(device_type=self.device.type,dtype=torch.bfloat16):
                         loss = cross_entropy(logits,y)
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
+                    loss.backward()
+                    optimizer.step()
+
 
                     if self.device.type == "cuda":
                         torch.cuda.synchronize(device=self.device)
