@@ -59,9 +59,9 @@ class ToyModel(nn.Module):
 
 
 class Benchmarking(ModelSize):
-    def __init__(self,size,device,batch_size = 4):
+    def __init__(self,size,device: str | torch.device ,batch_size = 4):
         super().__init__(size)
-        self.device = device
+        self.device: torch.device = torch.device(device)
         self.batch_size = batch_size
     def __model__(self,name):
         if name == "transformer":
@@ -169,7 +169,7 @@ class Benchmarking(ModelSize):
                 optimizer.zero_grad()
                 if self.device.type == "cuda":
                     torch.cuda.synchronize(device=self.device)
-            
+
                 logits = model(x)
                 loss = cross_entropy(logits,y)
                 loss.backward()
