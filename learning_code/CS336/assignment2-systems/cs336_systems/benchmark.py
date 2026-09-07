@@ -93,6 +93,8 @@ class Benchmarking(ModelSize):
             Transformer.to(device=self.device)
             return Transformer
         if name == "toymodel":
+            if not(in_features and out_features):
+                raise ValueError("No in_features and out_features:")
             model = ToyModel(
                 in_features,
                 out_features,
@@ -130,6 +132,7 @@ class Benchmarking(ModelSize):
         if name == "transformer":
             x,y = self.data_generate()
         elif name == "toymodel":
+
             x,y = model.data_generate_toymodel(self.batch_size)
         else:
             raise NameError("Error model name")
