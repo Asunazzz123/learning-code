@@ -16,7 +16,7 @@ class MemoryProfiler():
         """
         torch.cuda.synchronize(self.device)
         start = torch.cuda.memory_allocated(self.device)
-        torch.cuda.reset_peak_host_memory_stats(self.device)
+        torch.cuda.reset_peak_memory_stats(self.device)
         try:
             yield
         finally:
@@ -43,8 +43,9 @@ class MemoryProfiler():
         torch.cuda.memory._dump_snapshot(path)
 
 
-    def tensor_mem(self, tensor: torch.tensor):
-        size = tensor.shape
-        
+    def tensor_mem(self, tensor: torch.Tensor):
+        # 输入三维张量的显存占用计算，
+        # 计算方式为 tensor size * dtype 的占用，假设 tensor.shape为 m,n, d_model. 精度为 FP32. 则显存占用为 m*m*d_model*32bit
+        return tensor.nbytes / (1024**2)
 
 
