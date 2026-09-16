@@ -1,0 +1,11 @@
+name = "matrix_rank"
+version = "0.1.0"
+defaultTargets = ["MatrixRank"]
+
+[[lean_lib]]
+name = "MatrixRank"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.33.1"
