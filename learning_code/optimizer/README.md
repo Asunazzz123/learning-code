@@ -64,30 +64,40 @@ MPLCONFIGDIR=/tmp/stiefel-mpl conda run -n agent python -m benchmark.benchmark
 训练/验证/测试集分别为 1024/512/512；默认 20 个 epoch、batch size 128，
 CPU float32 单线程，随机种子为 0/1/2。
 
-比较三种方法：
+比较五种方法：
 
 - `sgd`：标准 SGD，不施加正交约束。
 - `riemannian_sgd`：矩阵梯度投影到切空间，SGD 更新后做 polar retraction。
 - `msign`：本文优化器，内循环最多 20 次（可用 `--max-iter` 调整）。
+- `adam`：PyTorch Adam 更新全部参数，默认 betas=(0.9, 0.999)。
+- `muon`：PyTorch 原生 Muon 更新两层矩阵，Adam 更新偏置，偏置学习率为矩阵学习率的 0.1 倍。
+  Muon 使用 momentum=0.95、Nesterov、5 次 Newton–Schulz 迭代、`adjust_lr_fn="original"`。
+  该实现正交化更新方向，不约束权重本身；与 StiefelMsign 的 SVD 交替投影不同。
+  当前矩阵按 input×output 存储，原生 original 缩放对两层均为 sqrt(2)。
+  参见 [PyTorch Muon 文档](https://docs.pytorch.org/docs/main/generated/torch.optim.Muon.html)。
 
 两个受约束方法都约束两层权重，偏置使用普通 SGD。
-各方法使用相同初始权重、批次顺序和学习率搜索预算，在 `[0.01, 0.05, 0.2]` 中
+各方法使用相同初始权重、批次顺序和默认学习率搜索预算（3 个候选），Adam 搜索
+`[0.001, 0.005, 0.02]`（`--adam-lrs`），其余方法搜索 `[0.01, 0.05, 0.2]`（`--lrs`），
 按跨种子的最终验证损失选择一个学习率，然后报告最终模型测试结果。
-没有动量或权重衰减。各方法的学习率同时应用于权重和偏置；相同学习率不代表相同更新幅度。
+所有方法的权重衰减均为零，SGD/流形 SGD/StiefelMsign 无动量，Adam 和 Muon 使用各自动量。
+除 Muon 偏置采用上述比例外，学习率同时应用于权重和偏置；相同学习率不代表相同更新幅度。
+Muon 结果代表这里指定的 Muon+Adam 组合，而非对全部参数使用 Muon。
 
-从 optimizer 目录运行上述模块命令。结果保存在 `benchmark/results/benchmark_msign_last/`；
-上一版以切空间投影结束的结果保留在 `benchmark/results/benchmark/`。
+从 optimizer 目录运行上述模块命令。五方法结果保存在 `benchmark/results/benchmark_five_optimizers/`；
+此前三方法结果保留在 `benchmark/results/benchmark_msign_last/`，
+最初以切空间投影结束的结果保留在 `benchmark/results/benchmark/`。
 
 - `summary.md`：选中学习率及测试指标的均值、样本标准差。
 - `results.json`：算法顺序、运行配置、环境、全部训练/验证曲线及抽样内循环残差与状态。
 - `curves.png`：训练损失、验证准确率以及按训练时间对比的曲线。
 
 计时包含前向、反向和优化器更新，排除初始化、评估、绘图和学习率搜索的其他试验。
-运行前做独立预热。内循环诊断每个 epoch 最后一批抽样记录。
+每种优化器运行前分别做独立预热。内循环诊断每个 epoch 最后一批抽样记录。
 此实验适合检查算法行为与开销，不能据此断言真实数据集上的普遍优劣。
 
 快速运行或调整参数：
 
 ```sh
-MPLCONFIGDIR=/tmp/stiefel-mpl conda run -n agent python -m benchmark.benchmark --epochs 5 --seeds 0 --lrs 0.05 --output benchmark/results/smoke
+MPLCONFIGDIR=/tmp/stiefel-mpl conda run -n agent python -m benchmark.benchmark --epochs 5 --seeds 0 --lrs 0.05 --adam-lrs 0.005 --output benchmark/results/smoke
 ```

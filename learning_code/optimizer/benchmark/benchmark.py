@@ -15,6 +15,24 @@ from torch.nn import functional as F
 
 from stiefel_msign import StiefelMsign, msign, project_tangent
 
+METHODS = ("sgd", "riemannian_sgd", "msign", "adam", "muon")
+
+
+def make_optimizers(model, method, lr, max_iter):
+    if method == "msign":
+        return [StiefelMsign(model.matrices(), lr=lr, max_iter=max_iter),
+                torch.optim.SGD([model.b1, model.b2], lr=lr)]
+    if method == "adam":
+        return [torch.optim.Adam(model.parameters(), lr=lr, weight_decay=0)]
+    if method == "muon":
+        return [torch.optim.Muon(model.matrices(), lr=lr, weight_decay=0,
+                                 momentum=0.95, nesterov=True, ns_steps=5,
+                                 adjust_lr_fn="original"),
+                torch.optim.Adam([model.b1, model.b2], lr=lr * 0.1, weight_decay=0)]
+    if method in ("sgd", "riemannian_sgd"):
+        return [torch.optim.SGD(model.parameters(), lr=lr)]
+    raise ValueError(f"Unknown method: {method}")
+
 
 class SmallMLP(nn.Module):
     def __init__(self):
@@ -60,12 +78,10 @@ def train(method, lr, seed, data, args):
     torch.manual_seed(seed)
     model = SmallMLP()
     matrices = model.matrices()
-    if method == "msign":
-        matrix_opt = StiefelMsign(matrices, lr=lr, max_iter=args.max_iter)
-        bias_opt = torch.optim.SGD([model.b1, model.b2], lr=lr)
-        optimizers = [matrix_opt, bias_opt]
-    else:
-        optimizers = [torch.optim.SGD(model.parameters(), lr=lr)]
+    optimizers = make_optimizers(model, method, lr, args.max_iter)
+    optimizer_config = [dict(type=type(opt).__name__, groups=[
+        {k: v for k, v in group.items() if k != "params"}
+        for group in opt.param_groups]) for opt in optimizers]
     # Same batch order at each epoch across methods and learning rates.
     generator = torch.Generator().manual_seed(seed + 10000)
     history = []
@@ -98,7 +114,7 @@ def train(method, lr, seed, data, args):
             # Diagnostics are sampled at the last batch of each epoch.
             if method == "msign":
                 for w in matrices:
-                    info = matrix_opt.state[w]["diagnostics"]
+                    info = optimizers[0].state[w]["diagnostics"]
                     inner_iterations.append(info["iterations"])
                     inner_residuals.append(dict(epoch=epoch, matrix_shape=list(w.shape),
                                                 **info))
@@ -106,7 +122,7 @@ def train(method, lr, seed, data, args):
         history.append(dict(epoch=epoch, train_seconds=elapsed,
                             train=evaluate(model, data[0]), val=evaluate(model, data[1]),
                             orthogonality_error=orthogonality_error(model)))
-    return dict(method=method, lr=lr, seed=seed, history=history,
+    return dict(method=method, lr=lr, seed=seed, history=history, optimizer_config=optimizer_config,
                 sampled_inner_iterations=statistics.mean(inner_iterations) if inner_iterations else None,
                 sampled_statuses=statuses, sampled_inner_diagnostics=inner_residuals), copy.deepcopy(model.state_dict())
 
@@ -143,29 +159,26 @@ def main():
     parser.add_argument("--max-iter", type=int, default=20)
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     parser.add_argument("--lrs", type=float, nargs="+", default=[0.01, 0.05, 0.2])
-    parser.add_argument("--output", type=Path, default=Path(__file__).parent / "results/benchmark_msign_last")
+    parser.add_argument("--adam-lrs", type=float, nargs="+", default=[0.001, 0.005, 0.02])
+    parser.add_argument("--output", type=Path, default=Path(__file__).parent / "results/benchmark_five_optimizers")
     args = parser.parse_args()
     if min(args.epochs, args.batch_size, args.max_iter) < 1:
         parser.error("epochs, batch-size and max-iter must be positive")
-    if any(not math.isfinite(lr) or lr <= 0 for lr in args.lrs):
+    if any(not math.isfinite(lr) or lr <= 0 for lr in args.lrs + args.adam_lrs):
         parser.error("learning rates must be finite and positive")
     torch.set_num_threads(1)
     torch.use_deterministic_algorithms(True)
     args.output.mkdir(parents=True, exist_ok=True)
     data = make_data()
-    # Untimed CPU kernel warmup; each benchmark starts with fresh parameters.
-    torch.manual_seed(42)
-    warm_model = SmallMLP()
-    warm_opt = StiefelMsign(warm_model.matrices(), max_iter=args.max_iter)
-    for _ in range(3):
-        warm_model.zero_grad()
-        F.cross_entropy(warm_model(data[0][0][:128]), data[0][1][:128]).backward()
-        warm_opt.step()
-
     trials, selected, summary = [], {}, {}
-    for method in ("sgd", "riemannian_sgd", "msign"):
+    for method in METHODS:
+        learning_rates = args.adam_lrs if method == "adam" else args.lrs
+        # Independent warmup for each optimizer, discarded from all results.
+        warm_args = copy.copy(args)
+        warm_args.epochs = 1
+        train(method, learning_rates[0], 42, data, warm_args)
         candidates = []
-        for lr in args.lrs:
+        for lr in learning_rates:
             runs, states = [], []
             for seed in args.seeds:
                 run, state = train(method, lr, seed, data, args)
@@ -210,6 +223,10 @@ def main():
               "Train/validation/test: 1024/512/512. Identical initialization and batch order per seed.",
               "CPU, float32, one thread. Time includes forward/backward/optimizer, excludes evaluation and initialization.",
               "SGD is unconstrained. Riemannian SGD and msign constrain both weight matrices; biases use SGD.",
+              "Adam updates all parameters. Muon updates both matrices; Adam updates biases at 0.1 × Muon LR.",
+              "Muon: torch.optim.Muon, momentum=0.95, Nesterov, 5 Newton–Schulz steps, original LR scaling.",
+              "All methods use zero weight decay; Adam and Muon do not constrain weight orthogonality.",
+              f"LR grids: Adam={args.adam_lrs}; other methods={args.lrs}. Each optimizer is independently warmed up.",
               "Synthetic results and this finite LR grid do not establish general optimizer superiority."]
     lines += ["", "Selected msign inner-loop diagnostics (last batch of each epoch, both matrices):"]
     for run in selected["msign"]:
