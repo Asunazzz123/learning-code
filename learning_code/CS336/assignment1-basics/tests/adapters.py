@@ -30,8 +30,8 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     return torch.matmul(in_features,weights.T)
-    
-        
+
+
 
 
 def run_embedding(
@@ -87,13 +87,13 @@ def run_swiglu(
     # swiglu.w3.weight.data = w3_weight
     def run_silu(in_features):
         return in_features / (1+ torch.exp( - in_features))
-    
+
     tensor_1 = in_features @ w1_weight.T   # Dimension Check -- tensor_1 : ... d_ff
     tensor_2 = in_features @ w3_weight.T   # Dimension Chech -- tensor_2 : ... d_ff
     # Element-wise product of tensors need the same shapes, and the sigmoid fun keep the shape
     return (run_silu(tensor_1)* tensor_2) @ w2_weight.T
-     
-                              
+
+
 
     # raise NotImplementedError
 
@@ -117,7 +117,7 @@ def run_scaled_dot_product_attention(
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
     mul = torch.matmul(Q,K.transpose(-2,-1)) / torch.sqrt(torch.tensor(K.shape[-1],device = K.device, dtype = K.dtype))
-    if (mask is None): 
+    if (mask is True):
         mask_mul = mul
     else:
         mask_mul = mul.masked_fill(mask,-torch.inf)
@@ -157,7 +157,7 @@ def run_multihead_self_attention(
         implementation with the given QKV projection weights and input features.
     """
     d_k = d_model // num_heads
-    Q = (in_features @ q_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3) 
+    Q = (in_features @ q_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
     K = (in_features @ k_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
     V = (in_features @ v_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
 
@@ -205,8 +205,8 @@ def run_multihead_self_attention_with_rope(
         implementation with the given QKV projection weights and input features.
     """
     d_k = d_model // num_heads
-    Q = (in_features @ q_proj_weight).reshape(...,num_heads, d_k) 
-    K = (in_features @ k_proj_weight).reshape(...,num_heads, d_k) 
+    Q = (in_features @ q_proj_weight).reshape(...,num_heads, d_k)
+    K = (in_features @ k_proj_weight).reshape(...,num_heads, d_k)
     V = (in_features @ v_proj_weight).reshape(...,num_heads, d_k)
     Q = Q.reshape(*Q.shape[:-1], num_heads, d_k).transpose(-2, -3)
     K = K.reshape(*K.shape[:-1], num_heads, d_k).transpose(-2, -3)
@@ -217,11 +217,9 @@ def run_multihead_self_attention_with_rope(
     else:
         Q_rope = run_rope(d_k,theta, max_seq_len, Q, token_positions)
         K_rope = run_rope(d_k,theta, max_seq_len, K, token_positions)
-        
+
     attn = run_scaled_dot_product_attention(Q_rope,K_rope,V).transpose(-2,-3).reshape(*in_features.shape[:-1],d_model)
     return attn @ o_proj_weight.T
-
-
 
 
 
@@ -349,13 +347,13 @@ def run_transformer_block(
         q_proj_weight=weights.get("attn.q_proj.weight"),
         k_proj_weight=weights.get("attn.k_proj.weight"),
         v_proj_weight=weights.get("attn.v_proj.weight"),
-        o_proj_weight=weights.get("attn.o_proj.weight"),
+        o_proj_weight=weights.get("attn.output_proj.weight"),
         in_features=input_hvec_1,
         token_positions=token_positions
         )
-    
+
     input_hvec_2 = run_rmsnorm(d_model=d_model,eps=10**(-6),weights=weights.get("ln2.weight"),in_features=attn_output)
-    
+
     ffn_output = attn_output + run_swiglu(
         d_model=d_model,
         d_ff=d_ff,
@@ -472,7 +470,8 @@ def run_transformer_lm(
             d_ff=d_ff,
             theta=rope_theta,
             weights=layer_weights,
-            in_features=flow
+            in_features=flow,
+            max_seq_len=context_length
             )
     rms_output = run_rmsnorm(d_model=d_model,eps = 10**(-6),weights=weights.get("ln_final.weight"),in_features=flow)
     lm_output = run_linear(d_in=d_model,d_out=vocab_size,weights=weights.get("lm_head.weight"),in_features=rms_output)
@@ -582,10 +581,12 @@ def run_cross_entropy(
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
-    inputs_ = run_softmax(inputs,dim=-1)
-    target_tensor = inputs_[torch.arange(inputs.shape[0]),targets]
-    return -torch.mean(torch.log(target_tensor))
-    
+
+
+    target_tensor = inputs[torch.arange(inputs.shape[0]),targets] # cal the logits output 
+    return -torch.mean(target_tensor) + torch.mean(torch.logsumexp(inputs,dim=-1)) # - sum_i log exp(x_i)/exp(sum_j x_j) = - sum_i x_i + sum_i logsumexp x_j
+
+
     # raise NotImplementedError
 
 
