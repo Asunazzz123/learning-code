@@ -584,7 +584,7 @@ def run_cross_entropy(
 
 
     target_tensor = inputs[torch.arange(inputs.shape[0]),targets] # cal the logits output
-    return -torch.mean(target_tensor) + torch.mean(torch.logsumexp(inputs,dim=-1)) # - sum_i log exp(x_i)/exp(sum_j x_j) = - sum_i x_i + sum_i logsumexp x_j
+    return -torch.mean(target_tensor) + torch.mean(torch.logsumexp(inputs,dim=-1)) # - sum_i log exp(x_i)/sum_j exp(x_j) = - sum_i x_i + sum_i logsumexp x_j
 
 
     # raise NotImplementedError
@@ -599,13 +599,21 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
 
     The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    norm = torch.tensor(0.0)
+    eff_param = []
     for p in parameters:
+        if p.grad is not None:
+            eff_param.append(p)
+    norm = torch.tensor(0.0)
+    for p in eff_param:
         norm += torch.norm(p.grad) ** 2
+
     total_norm = torch.sqrt(norm)
     if total_norm > max_l2_norm:
-        for p in parameters:
+        for p in eff_param:
             p.grad *= max_l2_norm / (total_norm + 10**(-6))
+
+
+
     # raise NotImplementedError
 
 
