@@ -7,9 +7,12 @@ from typing import IO, Any, BinaryIO
 from cs336_basics.tokenizer import Tokenizer, train
 import numpy.typing as npt
 import torch
+from torch.optim import Optimizer
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def run_linear(
     d_in: int,
@@ -603,7 +606,7 @@ def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm:
     for p in parameters:
         if p.grad is not None:
             eff_param.append(p)
-    norm = torch.tensor(0.0)
+    norm = torch.tensor(0.0,device=DEVICE)
     for p in eff_param:
         norm += torch.norm(p.grad) ** 2
 
@@ -621,7 +624,7 @@ def get_adamw_cls() -> Any:
     """
     Returns a torch.optim.Optimizer that implements AdamW.
     """
-    return torch.optim.AdamW
+    return TinyAdamW
     # raise NotImplementedError
 
 
@@ -769,3 +772,79 @@ def run_train_bpe(
     # raise NotImplementedError
 
 
+class TinyAdamW(Optimizer):
+    def __init__(
+        self,
+        params,
+        lr= 10 ** -3,
+        betas=(0.9, 0.999),
+        eps=1e-8,
+        weight_decay=0.01
+    ):
+        defaults = {
+            "lr":lr,
+            "betas":betas,
+            "eps":eps,
+            "weight_decay":weight_decay
+        }
+
+        super().__init__(params,defaults)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = None
+
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        for group in self.param_groups:
+            lr = group["lr"]
+            beta1, beta2 = group["betas"]
+            eps = group["eps"]
+            wd = group["weight_decay"]
+            for p in group["params"]:
+                if p.grad is None:
+                    continue
+
+                grad = p.grad
+                state = self.state[p]
+
+                if len(state) == 0:
+                    state["step"] = 0
+                    state["exp_avg"] = torch.zeros_like(p)
+                    state["exp_avg_sq"] = torch.zeros_like(p)
+
+                state["step"] += 1
+
+                m = state["exp_avg"]
+                v = state["exp_avg_sq"]
+
+                # m_t = β1 m_{t-1} + (1-β1) g_t
+                m.mul_(beta1).add_(grad, alpha=1 - beta1)
+
+                # v_t = β2 v_{t-1} + (1-β2) g_t²
+                v.mul_(beta2).addcmul_(
+                    grad,
+                    grad,
+                    value=1 - beta2,
+                )
+
+                t = state["step"]
+
+                m_hat = m / (1 - beta1 ** t)
+                v_hat = v / (1 - beta2 ** t)
+
+
+
+                p.mul_(1 - lr * wd)
+
+
+                p.addcdiv_(
+                    m_hat,
+                    v_hat.sqrt().add_(eps),
+                    value=-lr,
+                )
+
+
+        return loss
