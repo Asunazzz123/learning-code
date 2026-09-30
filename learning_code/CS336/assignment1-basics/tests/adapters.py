@@ -457,7 +457,7 @@ def run_transformer_lm(
         "attn.q_proj.weight": weights.get(f"layers.{i}.attn.q_proj.weight"),
         "attn.k_proj.weight": weights.get(f"layers.{i}.attn.k_proj.weight"),
         "attn.v_proj.weight": weights.get(f"layers.{i}.attn.v_proj.weight"),
-        "attn.o_proj.weight": weights.get(f"layers.{i}.attn.o_proj.weight"),
+        "attn.output_proj.weight": weights.get(f"layers.{i}.attn.output_proj.weight"),
         "ln1.weight": weights.get(f"layers.{i}.ln1.weight"),
         "ln2.weight": weights.get(f"layers.{i}.ln2.weight"),
         "ffn.w1.weight": weights.get(f"layers.{i}.ffn.w1.weight"),
@@ -583,7 +583,7 @@ def run_cross_entropy(
     """
 
 
-    target_tensor = inputs[torch.arange(inputs.shape[0]),targets] # cal the logits output 
+    target_tensor = inputs[torch.arange(inputs.shape[0]),targets] # cal the logits output
     return -torch.mean(target_tensor) + torch.mean(torch.logsumexp(inputs,dim=-1)) # - sum_i log exp(x_i)/exp(sum_j x_j) = - sum_i x_i + sum_i logsumexp x_j
 
 

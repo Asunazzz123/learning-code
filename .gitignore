@@ -1,6 +1,7 @@
 .vscode
 *.local.md
 .claude
+.codex
 .DS_Store
 
 # Local LLM credentials
