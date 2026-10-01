@@ -120,10 +120,12 @@ def run_scaled_dot_product_attention(
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
     mul = torch.matmul(Q,K.transpose(-2,-1)) / torch.sqrt(torch.tensor(K.shape[-1],device = K.device, dtype = K.dtype))
-    if (mask is True):
+    if (mask is None):
         mask_mul = mul
     else:
-        mask_mul = mul.masked_fill(mask,-torch.inf)
+        m = torch.logical_not(mask) # torch Tensor的逐元素逻辑计算API: logical_not / logical_and / logical_or / logical_xor
+        mask_mul = mul.masked_fill(m,-torch.inf)
+
     return torch.matmul(run_softmax(mask_mul,dim=-1),V)
     # raise NotImplementedError
 
@@ -835,10 +837,7 @@ class TinyAdamW(Optimizer):
                 m_hat = m / (1 - beta1 ** t)
                 v_hat = v / (1 - beta2 ** t)
 
-
-
                 p.mul_(1 - lr * wd)
-
 
                 p.addcdiv_(
                     m_hat,
