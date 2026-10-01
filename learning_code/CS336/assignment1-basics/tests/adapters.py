@@ -7,10 +7,9 @@ from typing import IO, Any, BinaryIO
 from cs336_basics.tokenizer import Tokenizer, train
 import numpy.typing as npt
 import torch
-from torch.optim import Optimizer
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
-
+from utils.optimizer import TinyAdamW
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -278,6 +277,7 @@ def run_transformer_block(
     theta: float,
     weights: dict[str, Tensor],
     in_features: Float[Tensor, " batch sequence_length d_model"],
+    mask: Bool[Tensor, " ... queries keys"] | None = None
 ) -> Float[Tensor, " batch sequence_length d_model"]:
     """
     Given the weights of a pre-norm Transformer block and input features,
@@ -335,6 +335,7 @@ def run_transformer_block(
                 Shape is (d_model,).
         in_features (Float[Tensor, "batch sequence_length d_model"]):
             Tensor to run your implementation on.
+        mask (Bool[Tensor,"... queries keys]): Casual Mask Tensor
 
     Returns:
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
@@ -343,7 +344,12 @@ def run_transformer_block(
     d_k = d_model // num_heads
     seq_len = in_features.shape[-2]
     token_positions = torch.arange(seq_len,device = in_features.device)
-
+    # 将mask化为下三角 casual mask 以遮蔽未来信息
+    causal_mask = torch.ones(seq_len, seq_len, dtype=torch.bool,device=in_features.device).tril()
+    if mask is not None:
+        mask = torch.logical_and(causal_mask,mask)
+    else:
+        mask = causal_mask
 
     input_hvec_1 = run_rmsnorm(d_model=d_model,eps=10**(-6),weights=weights.get("ln1.weight"),in_features=in_features)
     attn_output =in_features + run_multihead_self_attention_with_rope(
@@ -356,7 +362,8 @@ def run_transformer_block(
         v_proj_weight=weights.get("attn.v_proj.weight"),
         o_proj_weight=weights.get("attn.output_proj.weight"),
         in_features=input_hvec_1,
-        token_positions=token_positions
+        token_positions=token_positions,
+        mask=mask
         )
 
     input_hvec_2 = run_rmsnorm(d_model=d_model,eps=10**(-6),weights=weights.get("ln2.weight"),in_features=attn_output)
@@ -480,7 +487,7 @@ def run_transformer_lm(
             in_features=flow,
             max_seq_len=context_length
             )
-    rms_output = run_rmsnorm(d_model=d_model,eps = 10**(-6),weights=weights.get("ln_final.weight"),in_features=flow)
+    rms_output = run_rmsnorm(d_model=d_model,eps = 1e-5,weights=weights.get("ln_final.weight"),in_features=flow)
     lm_output = run_linear(d_in=d_model,d_out=vocab_size,weights=weights.get("lm_head.weight"),in_features=rms_output)
     return lm_output
     # raise NotImplementedError
@@ -776,76 +783,3 @@ def run_train_bpe(
     # raise NotImplementedError
 
 
-class TinyAdamW(Optimizer):
-    def __init__(
-        self,
-        params,
-        lr= 10 ** -3,
-        betas=(0.9, 0.999),
-        eps=1e-8,
-        weight_decay=0.01
-    ):
-        defaults = {
-            "lr":lr,
-            "betas":betas,
-            "eps":eps,
-            "weight_decay":weight_decay
-        }
-
-        super().__init__(params,defaults)
-
-    @torch.no_grad()
-    def step(self, closure=None):
-        loss = None
-
-        if closure is not None:
-            with torch.enable_grad():
-                loss = closure()
-
-        for group in self.param_groups:
-            lr = group["lr"]
-            beta1, beta2 = group["betas"]
-            eps = group["eps"]
-            wd = group["weight_decay"]
-            for p in group["params"]:
-                if p.grad is None:
-                    continue
-
-                grad = p.grad
-                state = self.state[p]
-
-                if len(state) == 0:
-                    state["step"] = 0
-                    state["exp_avg"] = torch.zeros_like(p)
-                    state["exp_avg_sq"] = torch.zeros_like(p)
-
-                state["step"] += 1
-
-                m = state["exp_avg"]
-                v = state["exp_avg_sq"]
-
-                # m_t = β1 m_{t-1} + (1-β1) g_t
-                m.mul_(beta1).add_(grad, alpha=1 - beta1)
-
-                # v_t = β2 v_{t-1} + (1-β2) g_t²
-                v.mul_(beta2).addcmul_(
-                    grad,
-                    grad,
-                    value=1 - beta2,
-                )
-
-                t = state["step"]
-
-                m_hat = m / (1 - beta1 ** t)
-                v_hat = v / (1 - beta2 ** t)
-
-                p.mul_(1 - lr * wd)
-
-                p.addcdiv_(
-                    m_hat,
-                    v_hat.sqrt().add_(eps),
-                    value=-lr,
-                )
-
-
-        return loss
