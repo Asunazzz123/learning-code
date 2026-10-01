@@ -138,6 +138,7 @@ def run_multihead_self_attention(
     v_proj_weight: Float[Tensor, " d_model d_model"],
     o_proj_weight: Float[Tensor, " d_model d_model"],
     in_features: Float[Tensor, " ... sequence_length d_model"],
+    mask: Bool[Tensor, " ... queries keys"] | None = None
 ) -> Float[Tensor, " ... sequence_length d_model"]:
     """
     Given the key, query, and value projection weights of a naive unbatched
@@ -156,17 +157,18 @@ def run_multihead_self_attention(
         v_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the V projection
         o_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the output projection
         in_features (Float[Tensor, "... sequence_length d_model"]): Tensor to run your implementation on.
-
+        mask (Bool[Tensor,"... queries keys]): Casual Mask Tensor
     Returns:
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
     d_k = d_model // num_heads
-    Q = (in_features @ q_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
-    K = (in_features @ k_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
-    V = (in_features @ v_proj_weight).reshape(...,num_heads,d_k).transpose(-2, -3)
+    # *in_features 提取前 n-1 维信息并解耦维度,在Tensor后两个维度添加head num 和 d_k 后交换倒数第二第三维 -- seq_length 和 num_heads
+    Q = (in_features @ q_proj_weight.T).reshape(*in_features.shape[:-1],num_heads,d_k).transpose(-2, -3)
+    K = (in_features @ k_proj_weight.T).reshape(*in_features.shape[:-1],num_heads,d_k).transpose(-2, -3)
+    V = (in_features @ v_proj_weight.T).reshape(*in_features.shape[:-1],num_heads,d_k).transpose(-2, -3)
 
-    attn_output = run_scaled_dot_product_attention(Q, K, V)
+    attn_output = run_scaled_dot_product_attention(Q, K, V, mask)
     attn_output = attn_output.transpose(-2, -3).reshape(*in_features.shape[:-1], d_model)
     return attn_output @ o_proj_weight.T
     # raise NotImplementedError
