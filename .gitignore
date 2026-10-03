@@ -9,3 +9,6 @@ learning_code/toolbox/LLM/.env
 
 # local env
 learning_code/.env
+
+# Training code is managed independently in the sibling CS336 repository.
+/learning_code/CS336/assignment1/
