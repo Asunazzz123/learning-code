@@ -101,18 +101,17 @@ class RMSNorm(nn.Module):
         super().__init__()
         self.d_model = d_model
         self.eps = eps
-
-        self.weight = nn.Parameter(torch.ones(d_model))
+        self.dtype = dtype
+        self.weight = nn.Parameter(torch.ones(d_model,device=device,dtype=dtype))
         # raise NotImplementedError
 
     def forward(self, x: Tensor) -> Tensor:
-        x.to(torch.float32)
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
         # norm(x) = sqrt(bar{x^2}+eps)
-        var = x.pow(2).mean(dim=-1, keepdim=True) + self.eps
-        norm = torch.rsqrt(var) * x
-        norm.to(dtype=self.dtype)
+        var = x.square().mean(dim=-1, keepdim=True) + self.eps
         # rmsnorm = weight * x / norm(x)
-        rmsnorm = norm * self.weight
+        rmsnorm = ((torch.rsqrt(var) * x) * self.weight).to(in_dtype)
         return rmsnorm
 
         # raise NotImplementedError
@@ -138,9 +137,9 @@ class SwiGLU(nn.Module):
         self.d_model = d_model
         self.d_ff = d_ff
 
-        w1 = torch.empty(d_model,d_ff,device=device,dtype=dtype)
-        w2 = torch.empty(d_ff,d_model,device=device,dtype=dtype)
-        w3 = torch.empty(d_model,d_ff,device=device,dtype=dtype)
+        self.w1 = Linear(d_model,d_ff,device=device,dtype=dtype)
+        self.w2 = Linear(d_ff,d_model,device=device,dtype=dtype)
+        self.w3 = Linear(d_model,d_ff,device=device,dtype=dtype)
 
         # raise NotImplementedError
 
@@ -148,8 +147,7 @@ class SwiGLU(nn.Module):
         return torch.div(input,1+torch.exp(-input))
 
     def forward(self, x: Tensor) -> Tensor:
-        silu = self.Silu(torch.mul(self.w1,x))
-        return torch.mul(self.w2,self.mul(silu,self.w3))
+        return self.w2(self.Silu(self.w1(x)) * self.w3(x))
         # raise NotImplementedError
 
 
@@ -301,10 +299,38 @@ class TransformerBlock(nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
-        raise NotImplementedError
+
+        self.CMHA = CausalMultiHeadSelfAttention(
+            d_model=d_model,
+            num_heads=num_heads,
+            max_seq_len=max_seq_len,
+            theta=theta,
+            device=device,
+            dtype=dtype
+        )
+        self.ffn = SwiGLU(
+            d_model=d_model,
+            d_ff=d_ff,
+            device=device,
+            dtype=dtype
+        )
+        self.ln1 = RMSNorm(
+            d_model=d_model,
+            device=device,
+            dtype=dtype
+        )
+        self.ln2 = RMSNorm(
+            d_model=d_model,
+            device=device,
+            dtype=dtype
+        )
+        # raise NotImplementedError
 
     def forward(self, x: Tensor) -> Tensor:
-        raise NotImplementedError
+        x = torch.add(x,self.CMHA(self.ln1(x)))
+        output = torch.add(x,self.ffn(self.ln2(x)))
+        return output
+        # raise NotImplementedError
 
 
 class TransformerLM(nn.Module):
@@ -334,6 +360,12 @@ class TransformerLM(nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.context_length = context_length
+
+
+
         raise NotImplementedError
 
     def forward(self, in_indices: Tensor) -> Tensor:
