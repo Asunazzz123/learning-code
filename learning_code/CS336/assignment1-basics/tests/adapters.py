@@ -10,7 +10,7 @@ import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
 from utils.optimizer import TinyAdamW
-
+from einops import rearrange
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def run_linear(
@@ -156,7 +156,7 @@ def run_multihead_self_attention(
         v_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the V projection
         o_proj_weight (Float[Tensor, "d_model d_model"]): Weights for the output projection
         in_features (Float[Tensor, "... sequence_length d_model"]): Tensor to run your implementation on.
-        mask (Bool[Tensor,"... queries keys]): Casual Mask Tensor
+        mask (Bool[Tensor,"... queries keys]): Causal Mask Tensor
     Returns:
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
@@ -213,9 +213,25 @@ def run_multihead_self_attention_with_rope(
         implementation with the given QKV projection weights and input features.
     """
     d_k = d_model // num_heads
-    Q = (in_features @ q_proj_weight.T).reshape(*in_features.shape[:-1],num_heads, d_k).transpose(-2, -3)
-    K = (in_features @ k_proj_weight.T).reshape(*in_features.shape[:-1],num_heads, d_k).transpose(-2, -3)
-    V = (in_features @ v_proj_weight.T).reshape(*in_features.shape[:-1],num_heads, d_k).transpose(-2, -3)
+    # Rewrite Tensor Product with einops rearrange, according to CS336 course
+    Q = rearrange(
+        in_features @ q_proj_weight.T,
+        "... s (h d) -> ... h s d",
+        h=num_heads
+    )
+    K = rearrange(
+        in_features @ k_proj_weight.T,
+        "... s (h d) -> ... h s d",
+        h=num_heads
+    )
+    V = rearrange(
+        in_features @ v_proj_weight.T,
+        "... s (h d) -> ... h s d",
+        h=num_heads
+    )
+    # Q = (in_features @ q_proj_weight.T).reshape(*in_features.shape[:-1],num_heads, d_k).transpose(-2, -3)
+    # K = (in_features @ k_proj_weight.T).reshape(*in_features.shape[:-1],num_heads, d_k).transpose(-2, -3)
+    # V = (in_features @ v_proj_weight.T).reshape(*in_features.shape[:-1],num_heads, d_k).transpose(-2, -3)
 
     if (token_positions is None):
         Q_rope = Q
@@ -366,7 +382,7 @@ def run_transformer_block(
         mask=mask
         )
 
-    input_hvec_2 = run_rmsnorm(d_model=d_model,eps=10**(-6),weights=weights.get("ln2.weight"),in_features=attn_output)
+    input_hvec_2 = run_rmsnorm(d_model=d_model,eps=1e-5,weights=weights.get("ln2.weight"),in_features=attn_output)
 
     ffn_output = attn_output + run_swiglu(
         d_model=d_model,

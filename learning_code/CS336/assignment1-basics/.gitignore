@@ -171,3 +171,5 @@ cs336_assignment1_basics.pdf
 CHANGELOG.md
 AGENTS.md
 CLAUDE.md
+.claude/*
+.codex/*
