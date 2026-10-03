@@ -360,13 +360,34 @@ class TransformerLM(nn.Module):
         dtype: torch.dtype | None = None,
     ) -> None:
         super().__init__()
+        
         self.vocab_size = vocab_size
-        self.d_model = d_model
         self.context_length = context_length
-
-
-
-        raise NotImplementedError
+        self.d_model = d_model
+        self.token_embeddings = Embedding(
+            vocab_size, d_model, device=device, dtype=dtype
+        )
+        self.layers = nn.ModuleList([
+            TransformerBlock(
+                d_model=d_model,
+                num_heads=num_heads,
+                d_ff=d_ff,
+                max_seq_len=context_length,
+                theta=rope_theta,
+                device=device,
+                dtype=dtype,
+            )
+            for _ in range(num_layers)
+        ])
+        self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
+        self.lm_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
 
     def forward(self, in_indices: Tensor) -> Tensor:
-        raise NotImplementedError
+        if in_indices.ndim != 2:
+            raise ValueError("in_indices must have shape (batch, sequence_length)")
+        if in_indices.shape[-1] > self.context_length:
+            raise ValueError("sequence_length exceeds context_length")
+        x = self.token_embeddings(in_indices)
+        for layer in self.layers:
+            x = layer(x)
+        return self.lm_head(self.ln_final(x))
