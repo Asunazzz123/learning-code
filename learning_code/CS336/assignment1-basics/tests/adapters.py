@@ -9,7 +9,7 @@ import numpy.typing as npt
 import torch
 from jaxtyping import Bool, Float, Int
 from torch import Tensor
-from utils.optimizer import TinyAdamW
+from cs336_basics.optimizer import TinyAdamW
 from einops import rearrange
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
