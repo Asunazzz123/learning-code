@@ -166,8 +166,8 @@ cython_debug/
 #.idea/
 
 *.DS_Store
-CLAUDE.mkdocs
-AGENTS.mkdocs
+CLAUDE.md
+AGENTS.md
 CHANGELOG.md
 cs336_spring2026_assignment5_alignment.pdf
 cs336_spring2026_assignment5_supplement_safety_rlhf.pdf
