@@ -209,7 +209,35 @@ def run_compute_rollout_rewards(
                 Reward statistics to log. At minimum, include the mean total
                 and format rewards over the rollout batch.
     """
-    raise NotImplementedError
+    #
+    assert len(rollout_responses) == len(repeated_ground_truths)
+
+    reward_dicts = [
+        reward_fn(response, ground_truth)
+        for response, ground_truth in zip(
+            rollout_responses,
+            repeated_ground_truths,
+        )
+    ]
+    raw_rewards = torch.tensor(
+        [r["reward"] for r in reward_dicts],
+        dtype=torch.float32,
+    )
+    
+    metadata = {
+        "mean_reward": sum(r["reward"] for r in reward_dicts) / len(reward_dicts),
+        "mean_format_reward": sum(
+            r["format_reward"] for r in reward_dicts
+        ) / len(reward_dicts),
+        "mean_answer_reward": sum(
+            r["answer_reward"] for r in reward_dicts
+        ) / len(reward_dicts),
+    }
+
+    return raw_rewards, metadata
+
+
+    # raise NotImplementedError
 
 
 def run_compute_group_normalized_rewards(
