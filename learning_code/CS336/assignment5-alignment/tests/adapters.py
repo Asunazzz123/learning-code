@@ -46,7 +46,76 @@ def run_tokenize_prompt_and_output(
                 with labels, with value 1 where the corresponding label token
                 is part of the response and 0 otherwise.
     """
-    raise NotImplementedError
+
+    # 1. tokenize prompt / output
+    prompt_tokens = tokenizer(
+        prompt_strs,
+        add_special_tokens=False,
+        padding=False,
+        truncation=False,
+        return_attention_mask=False,
+    )["input_ids"]
+
+    output_tokens = tokenizer(
+        output_strs,
+        add_special_tokens=False,
+        padding=False,
+        truncation=False,
+        return_attention_mask=False,
+    )["input_ids"]
+
+    batch_size = len(prompt_strs)
+
+    # 2. 分别记录长度
+    prompt_lens = torch.tensor(
+        [len(x) for x in prompt_tokens],
+        dtype=torch.long,
+    )
+
+    output_lens = torch.tensor(
+        [len(x) for x in output_tokens],
+        dtype=torch.long,
+    )
+
+    prompt_and_output_lens = prompt_lens + output_lens
+    max_len = prompt_and_output_lens.max().item()
+
+    pad_token_id = tokenizer.pad_token_id
+
+    #  token size [B, max_len]
+    token_ids = torch.full(
+        (batch_size, max_len),
+        fill_value=pad_token_id,
+        dtype=torch.long,
+    )
+
+    response_mask = torch.zeros(
+        (batch_size, max_len),
+        dtype=torch.bool,
+    )
+
+    # 3. 写入 prompt + output
+    for i, (prompt, output) in enumerate(zip(prompt_tokens, output_tokens)):
+        p_len = len(prompt)
+        o_len = len(output)
+
+        token_ids[i, :p_len] = torch.tensor(prompt)
+        token_ids[i, p_len:p_len + o_len] = torch.tensor(output)
+
+        # response 对应的位置
+        response_mask[i, p_len:p_len + o_len] = True
+
+    # 4. next-token prediction 对齐
+    input_ids = token_ids[:, :-1]
+    labels = token_ids[:, 1:]
+    response_mask = response_mask[:, 1:]
+
+    return {
+        "input_ids": input_ids,
+        "labels": labels,
+        "response_mask": response_mask,
+    }
+    # raise NotImplementedError
 
 
 def run_get_response_log_probs(
@@ -82,7 +151,33 @@ def run_get_response_log_probs(
                 entropy for each position (present only if
                 return_token_entropy=True).
     """
-    raise NotImplementedError
+
+    outputs = model(input_ids)
+    logits = outputs.logits
+
+    log_probs_all = torch.log_softmax(
+        logits,
+        dim=-1
+    )
+    log_probs = torch.gather(
+        log_probs_all,
+        dim=-1,
+        index=labels.unsqueeze(-1)
+    ).squeeze(-1)
+
+    result = {
+        "log_probs": log_probs,
+    }
+
+    if return_token_entropy:
+        probs = torch.softmax(logits, dim=-1)
+        token_entropy = -torch.sum(
+            probs * log_probs_all,
+            dim=-1
+        )
+        result["token_entropy"] = token_entropy
+    return result
+    # raise NotImplementedError
 
 
 def run_compute_rollout_rewards(
@@ -325,7 +420,7 @@ def run_grpo_train_step(
 
 
 """
-The below adapters are used in the optional 
+The below adapters are used in the optional
 RLHF / safety part of the Alignment assignment.
 """
 

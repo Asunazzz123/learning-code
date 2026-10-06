@@ -191,6 +191,9 @@ unit_texts.extend([t + "s" for t in unit_texts])
 
 def _strip_string(string):
     def _fix_fracs(string):
+        """
+        LaTeX 的frac花括号补全，"\fracab" 转化为 "\frac{a}{b}"
+        """
         substrs = string.split("\\frac")
         new_str = substrs[0]
         if len(substrs) > 1:
@@ -222,6 +225,9 @@ def _strip_string(string):
         return string
 
     def _fix_a_slash_b(string):
+        """
+        将 "a/b" 转化为 LaTeX 形式的分数 "\frac{a}{b}"
+        """
         if len(string.split("/")) != 2:
             return string
         a = string.split("/")[0]
@@ -245,6 +251,9 @@ def _strip_string(string):
             return string
 
     def _fix_sqrt(string):
+        """
+        LaTex 形式的sqrt括号补全，"\sqrtn" 转化为“\sqrt{m}”
+        """
         if "\\sqrt" not in string:
             return string
         splits = string.split("\\sqrt")
