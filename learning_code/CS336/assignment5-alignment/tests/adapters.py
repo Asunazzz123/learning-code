@@ -355,7 +355,65 @@ def run_compute_policy_gradient_loss(
                 Statistics from the underlying loss call, such as
                 clip-fraction components.
     """
-    raise NotImplementedError
+    advantages = raw_rewards_or_advantages.reshape(-1,1)
+    match importance_reweighting_method:
+
+        case "none":
+            l =  - advantages * policy_log_probs
+
+        case "noclip":
+            assert old_log_probs is not None
+            l = - torch.exp(policy_log_probs - old_log_probs) * advantages
+
+        case "grpo":
+            assert old_log_probs is not None
+            assert cliprange is not None
+            ratio = torch.exp(policy_log_probs - old_log_probs)
+            clipped_ratio = torch.clamp(
+                ratio,
+                min = 1 - cliprange,
+                max = 1 + cliprange
+            )
+            normal_object = torch.exp(policy_log_probs - old_log_probs) * advantages
+            clipped_object = clipped_ratio * advantages
+            l = -torch.minimum(normal_object,clipped_object)
+
+        case "gspo":
+            assert old_log_probs is not None
+            assert cliprange is not None
+            assert response_mask is not None
+
+            # 每条回答分别计算，形状 [B, 1]
+            log_ratio = policy_log_probs - old_log_probs
+            response_lengths = response_mask.sum(dim=1, keepdim=True)
+            assert torch.all(response_lengths > 0)
+
+            mean_log_ratio = (
+                (response_mask * log_ratio).sum(dim=1, keepdim=True)
+                / response_lengths
+            )
+            ratio = torch.exp(mean_log_ratio)
+
+            clipped_ratio = torch.clamp(
+                ratio,
+                min=1 - cliprange,
+                max=1 + cliprange,
+            )
+
+            sequence_loss = -torch.minimum(
+                ratio * advantages,
+                clipped_ratio * advantages,
+            )  # [B, 1]
+
+            l = sequence_loss.expand_as(policy_log_probs)  # [B, T]
+
+    # metadata = {
+    #     "clip_fraction": (
+    #             clipped_object < normal_object
+    #     ).float().mean().detach(),
+    # }
+    metadata = {}
+    return l,metadata
 
 
 def run_aggregate_loss_across_microbatch(
