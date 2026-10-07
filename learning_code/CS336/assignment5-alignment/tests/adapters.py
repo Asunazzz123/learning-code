@@ -151,14 +151,18 @@ def run_get_response_log_probs(
                 entropy for each position (present only if
                 return_token_entropy=True).
     """
-
+    # 前向传播, 输出的Tensor 是 [Batch,Sequence,Token]
+    #
     outputs = model(input_ids)
     logits = outputs.logits
+
 
     log_probs_all = torch.log_softmax(
         logits,
         dim=-1
     )
+
+    # 提取每一个位置的目标Token ID
     log_probs = torch.gather(
         log_probs_all,
         dim=-1,
@@ -177,6 +181,7 @@ def run_get_response_log_probs(
         )
         result["token_entropy"] = token_entropy
     return result
+
     # raise NotImplementedError
 
 
@@ -209,26 +214,31 @@ def run_compute_rollout_rewards(
                 Reward statistics to log. At minimum, include the mean total
                 and format rewards over the rollout batch.
     """
-    #
+    # 将生成的答案和标准答案长度对齐
     assert len(rollout_responses) == len(repeated_ground_truths)
 
     reward_dicts = [
+        # 根据 reward_fn 的打分规则进行打分
         reward_fn(response, ground_truth)
         for response, ground_truth in zip(
             rollout_responses,
             repeated_ground_truths,
         )
     ]
+    # 获得每条回答的总奖励
     raw_rewards = torch.tensor(
         [r["reward"] for r in reward_dicts],
         dtype=torch.float32,
     )
-    
+    # 构建整体日志，包含
     metadata = {
+        # 整体总奖励的均值
         "mean_reward": sum(r["reward"] for r in reward_dicts) / len(reward_dicts),
+        # 回答形式的奖励均值
         "mean_format_reward": sum(
             r["format_reward"] for r in reward_dicts
         ) / len(reward_dicts),
+        # 回答答案的奖励均值
         "mean_answer_reward": sum(
             r["answer_reward"] for r in reward_dicts
         ) / len(reward_dicts),
@@ -276,7 +286,29 @@ def run_compute_group_normalized_rewards(
                 your choice of other statistics to log (e.g. mean, std, max/min
                 of rewards).
     """
-    raise NotImplementedError
+    raw_rewards = raw_rewards.reshape(-1,group_size)
+
+    # advantage = (r-mu)/(delta+eps)
+    reward_mean = raw_rewards.mean(dim=1, keepdim=True) if baseline == "mean" else 0
+    if advantage_normalizer == "std":
+        divisor = raw_rewards.std(dim=1, keepdim=True) + advantage_eps
+    elif advantage_normalizer == "mean":
+        divisor = raw_rewards.mean(dim=1, keepdim= True) + advantage_eps
+    else:
+        divisor = 1
+
+    advantage = ((raw_rewards - reward_mean)/divisor).reshape(-1)
+
+    metadata = {
+        "mean": raw_rewards.mean().item(),
+        "std": raw_rewards.std().item(),
+        "max": raw_rewards.max().item(),
+        "min": raw_rewards.min().item()
+    }
+
+    return advantage, metadata
+
+    # raise NotImplementedError
 
 
 def run_compute_policy_gradient_loss(
