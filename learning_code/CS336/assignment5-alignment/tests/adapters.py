@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerBase
 
 
-
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def run_tokenize_prompt_and_output(
     prompt_strs: list[str],
     output_strs: list[str],
@@ -152,7 +152,6 @@ def run_get_response_log_probs(
                 return_token_entropy=True).
     """
     # 前向传播, 输出的Tensor 是 [Batch,Sequence,Token]
-    #
     outputs = model(input_ids)
     logits = outputs.logits
 
@@ -290,12 +289,19 @@ def run_compute_group_normalized_rewards(
 
     # advantage = (r-mu)/(delta+eps)
     reward_mean = raw_rewards.mean(dim=1, keepdim=True) if baseline == "mean" else 0
-    if advantage_normalizer == "std":
-        divisor = raw_rewards.std(dim=1, keepdim=True) + advantage_eps
-    elif advantage_normalizer == "mean":
-        divisor = raw_rewards.mean(dim=1, keepdim= True) + advantage_eps
-    else:
-        divisor = 1
+    match advantage_normalizer:
+        case "std":
+            divisor = raw_rewards.std(dim=1, keepdim=True) + advantage_eps
+
+        case "mean":
+            divisor = raw_rewards.mean(dim=1, keepdim= True) + advantage_eps
+
+        case "none":
+            divisor = 1
+
+        case _:
+            raise ValueError("Error Input advantage_normalizer")
+
 
     advantage = ((raw_rewards - reward_mean)/divisor).reshape(-1)
 
@@ -356,6 +362,7 @@ def run_compute_policy_gradient_loss(
                 clip-fraction components.
     """
     advantages = raw_rewards_or_advantages.reshape(-1,1)
+
     match importance_reweighting_method:
 
         case "none":
@@ -366,6 +373,7 @@ def run_compute_policy_gradient_loss(
             l = - torch.exp(policy_log_probs - old_log_probs) * advantages
 
         case "grpo":
+            # grpo token 裁剪计算: L= - min (ratio,ratio_clip*advantage), 即裁剪前后的对数差的min
             assert old_log_probs is not None
             assert cliprange is not None
             ratio = torch.exp(policy_log_probs - old_log_probs)
@@ -379,6 +387,7 @@ def run_compute_policy_gradient_loss(
             l = -torch.minimum(normal_object,clipped_object)
 
         case "gspo":
+            # gspo 根据token response_mask 对有效概率差加权，并使用和grpo 相似的裁剪
             assert old_log_probs is not None
             assert cliprange is not None
             assert response_mask is not None
@@ -406,7 +415,8 @@ def run_compute_policy_gradient_loss(
             )  # [B, 1]
 
             l = sequence_loss.expand_as(policy_log_probs)  # [B, T]
-
+        case _:
+            raise NameError("Error Input importance_reweighting_method")
     # metadata = {
     #     "clip_fraction": (
     #             clipped_object < normal_object
@@ -445,7 +455,23 @@ def run_aggregate_loss_across_microbatch(
             A scalar containing the average loss. Make sure you can later call
             backward on this loss.
     """
-    raise NotImplementedError
+    loss_masked = per_token_policy_gradient_loss * mask
+    match loss_normalization:
+        case "sequence":
+            # 每个 batch 中的有效回答token的loss 的平均
+            seq_loss = (
+                loss_masked.sum(dim = 1) / mask.sum(dim = 1)
+            )
+            # 对 batch 间的平均loss 求平均
+            loss = seq_loss.mean()
+        case "constant":
+            assert normalization_constant is not None
+            assert normalization_constant > 0
+
+            # 将每一个batch 的每一个seq tokens混合，求和后除以输入的常数
+            loss = loss_masked.sum() / normalization_constant
+    return loss
+    # raise NotImplementedError
 
 
 def run_grpo_train_step(
@@ -534,7 +560,107 @@ def run_grpo_train_step(
                 Dict with metadata from the underlying loss call, gradient norm
                 before clipping, and any other statistics you might want to log.
     """
-    raise NotImplementedError
+    metadata = {}
+    # 1. 对整个 rollout batch 打分，得到每条回答的原始奖励
+    raw_rewards, metadata_step1 = run_compute_rollout_rewards(
+        reward_fn=reward_fn,
+        rollout_responses=rollout_responses,
+        repeated_ground_truths=repeated_ground_truths
+    )
+
+    # 2. 按题目分组计算 advantages，在划分 microbatch 前完成组内比较
+    advantages , metadata_step2 = run_compute_group_normalized_rewards(
+        raw_rewards=raw_rewards,
+        group_size=group_size,
+        baseline=baseline,
+        advantage_eps=advantage_eps,
+        advantage_normalizer=advantage_normalizer
+    )
+    # advantages 作为固定训练信号，放到模型所在设备
+    device = next(model.parameters()).device
+    advantages = advantages.detach().to(device=device)
+
+
+    # 3. 对 prompt 和回答 Tokenize，构造输入、标签和回答 mask
+    tokenized = run_tokenize_prompt_and_output(
+        prompt_strs=repeated_prompts,
+        output_strs=rollout_responses,
+        tokenizer=tokenizer
+    )
+    # 将训练张量移到模型所在设备，旧策略 log_probs 不参与反向传播
+    input_ids = tokenized["input_ids"].to(device=device)
+    labels = tokenized["labels"].to(device=device)
+    response_mask = tokenized["response_mask"].to(device=device)
+    if old_log_probs is not None:
+        old_log_probs = old_log_probs.detach().to(device=device)
+    # 4. 根据梯度累积步数，将 batch 划分为等大小的 microbatch
+    batch_size = input_ids.shape[0]
+
+    assert gradient_accumulation_steps > 0
+    assert batch_size > 0
+    assert batch_size % gradient_accumulation_steps == 0
+
+    microbatch_size = batch_size // gradient_accumulation_steps
+
+    # 5. 清空旧梯度，初始化累计 loss，并融合奖励和优势的 metadata
+    optimizer.zero_grad(set_to_none=True)
+    total_loss = torch.zeros((), device=device)
+    metadata |= metadata_step1
+    metadata |= metadata_step2
+
+    # 6. 对各个 microbatch 分别前向和反向传播，累积梯度
+    for start in range(0,batch_size,microbatch_size):
+        end = start + microbatch_size
+        # 6.1 切片当前 microbatch，计算每个目标 token 的 log_probs
+        result = run_get_response_log_probs(
+            model=model,
+            input_ids=input_ids[start:end],
+            labels=labels[start:end],
+            return_token_entropy=False,
+        )
+        # 6.2 同步切片 advantages、旧策略 log_probs 和 mask，计算逐 token 损失
+        per_token_loss, metadata_step3 = run_compute_policy_gradient_loss(
+            raw_rewards_or_advantages=advantages[start:end],
+            policy_log_probs=result["log_probs"],
+            importance_reweighting_method=importance_reweighting_method,
+            old_log_probs=(
+                old_log_probs[start:end] if old_log_probs is not None else None
+            ),
+            cliprange=cliprange,
+            response_mask=response_mask[start:end],
+        )
+        # 6.3 用回答 mask 筛选有效 token，将损失聚合为标量
+        loss = run_aggregate_loss_across_microbatch(
+            per_token_policy_gradient_loss=per_token_loss,
+            mask=response_mask[start:end],
+            loss_normalization=loss_normalization,
+            normalization_constant=normalization_constant,
+        )
+
+        # sequence 模式按累积步数缩放；constant 模式已使用完整 batch 的固定分母
+        if loss_normalization == "sequence":
+            loss = loss / gradient_accumulation_steps
+
+        # 6.4 累积梯度，循环内不清空梯度，也不更新参数
+        loss.backward()
+        # 6.5 累加用于日志的 loss，取各 microbatch 统计量的平均值
+        total_loss = total_loss + loss.detach()
+        for key, value in metadata_step3.items():
+            metadata[key] = metadata.get(key, 0) + value.detach() / gradient_accumulation_steps
+
+    # 7. 所有梯度累积完成后统一裁剪，并记录裁剪前的梯度范数
+    if max_grad_norm is not None:
+        metadata["grad_norm"] = torch.nn.utils.clip_grad_norm_(
+            model.parameters(), max_norm=max_grad_norm
+        ).detach()
+
+    # 8. 更新一次模型参数，清空梯度，为下一次训练步做准备
+    optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+    # 9. 返回完整 batch 的累计 loss 和 metadata
+    return total_loss, metadata
+
+    # raise NotImplementedError
 
 
 """
