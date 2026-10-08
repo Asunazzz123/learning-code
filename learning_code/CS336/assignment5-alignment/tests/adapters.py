@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+
+import re
+import json
 import os
+import random
+from pathlib import Path
 from typing import Any, Callable, Literal
 
 import torch
 from torch import Tensor
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset,DataLoader
 from transformers import PreTrainedTokenizerBase
 
 
@@ -669,6 +674,24 @@ RLHF / safety part of the Alignment assignment.
 """
 
 
+class _PackedSFTDataset(Dataset):
+    def __init__(self, token_ids: list[int], seq_length: int):
+        tokens = torch.tensor(token_ids, dtype=torch.long)
+        n_examples = max(0, (len(token_ids) - 1) // seq_length)
+        usable_length = n_examples * seq_length
+        self.input_ids = tokens[:usable_length].reshape(n_examples, seq_length)
+        self.labels = tokens[1:usable_length + 1].reshape(n_examples, seq_length)
+
+    def __len__(self):
+        return self.input_ids.shape[0]
+
+    def __getitem__(self, index):
+        return {
+            "input_ids": self.input_ids[index],
+            "labels": self.labels[index],
+        }
+
+
 def get_packed_sft_dataset(
     tokenizer: PreTrainedTokenizerBase,
     dataset_path: str | os.PathLike,
@@ -696,7 +719,38 @@ def get_packed_sft_dataset(
         "input_ids" contains the token IDs for the language modeling inputs, and "labels" contains
         the token IDs for the language modeling labels.
     """
-    raise NotImplementedError
+    if seq_length <= 0:
+        raise ValueError("seq_length must be positive")
+    if tokenizer.eos_token_id is None:
+        raise ValueError("tokenizer must define an EOS token")
+
+    # 1. 逐行读取 JSONL，每条样本包含 prompt 和 response
+    with open(dataset_path, encoding="utf-8") as f:
+        documents = [json.loads(line) for line in f if line.strip()]
+
+    # 2. 在 packing 前打乱文档顺序，保留每条文档内部的 token 顺序
+    if shuffle:
+        random.shuffle(documents)
+
+    # 3. 使用 Alpaca SFT 模板组织输入，去掉模板首尾的空白
+    template_path = (
+        Path(__file__).resolve().parents[1]
+        / "cs336_alignment/prompts_safety/alpaca_sft.prompt"
+    )
+    template = template_path.read_text(encoding="utf-8").strip()
+
+    # 4. 分词并追加 EOS，将各文档拼接为一个连续 token 流
+    token_ids = []
+    for document in documents:
+        text = template.format(
+            instruction=document["prompt"],
+            response=document["response"],
+        )
+        token_ids.extend(tokenizer.encode(text, add_special_tokens=True))
+        token_ids.append(tokenizer.eos_token_id)
+
+    # 5. 按固定长度切块，labels 向后偏移一位，丢弃不足一块的尾部
+    return _PackedSFTDataset(token_ids, seq_length)
 
 
 def run_iterate_batches(
@@ -719,7 +773,13 @@ def run_iterate_batches(
     Returns:
         Iterable over batches, where each batch has size `batch_size`.
     """
-    raise NotImplementedError
+    return DataLoader(
+        dataset=dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        drop_last=False
+    )
+    # raise NotImplementedError
 
 
 def run_parse_mmlu_response(
@@ -745,8 +805,14 @@ def run_parse_mmlu_response(
         str (one of "A", "B", "C", or "D") if the model output can be parsed into a prediction,
         else None.
     """
-    raise NotImplementedError
+    answer = mmlu_example["answer"]
 
+    match = re.search(
+        r"\b(?:the\s+correct\s+answer\s+is|answer\s*[:：])\s*([ABCD])\b",
+        model_output,
+        flags=re.IGNORECASE,
+    )
+    return match.group(1).upper() if match else None
 
 def run_parse_gsm8k_response(
     model_output: str,
@@ -762,7 +828,8 @@ def run_parse_gsm8k_response(
         str with the predicted numeric answer if the model output can be parsed into a prediction,
         else None.
     """
-    raise NotImplementedError
+    numbers = re.findall(r"-?\d+(?:\.\d+)?", model_output)
+    return numbers[-1] if numbers else None
 
 
 def run_compute_per_instance_dpo_loss(
@@ -797,4 +864,58 @@ def run_compute_per_instance_dpo_loss(
     Returns:
         torch.Tensor with the DPO loss for this example.
     """
-    raise NotImplementedError
+    formatted_prompt = (
+        "Below is an instruction that describes a task. "
+        "Write a response that appropriately completes the request.\n\n"
+        f"### Instruction:\n{prompt}\n\n"
+        "### Response:\n"
+    )
+    tokenized = run_tokenize_prompt_and_output(
+        prompt_strs=[formatted_prompt, formatted_prompt],
+        output_strs=[
+            response_chosen + tokenizer.eos_token,
+            response_rejected + tokenizer.eos_token,
+        ],
+        tokenizer=tokenizer
+    )
+    input = tokenized["input_ids"]
+    label = tokenized["labels"]
+    result = run_get_response_log_probs(
+        model=lm,
+        input_ids=input,
+        labels=label,
+        return_token_entropy=False
+    )
+    token_log_probs = result["log_probs"]
+
+    sequence_log_probs = (
+        token_log_probs * tokenized["response_mask"]
+    ).sum(dim=1)
+
+    log_prob_chosen = sequence_log_probs[0]
+    log_prob_rejected = sequence_log_probs[1]
+
+    with torch.no_grad():
+        ref_result = run_get_response_log_probs(
+            model=lm_ref,
+            input_ids=tokenized["input_ids"],
+            labels=tokenized["labels"],
+            return_token_entropy=False,
+        )
+
+        ref_sequence_log_probs = (
+            ref_result["log_probs"] * tokenized["response_mask"]
+        ).sum(dim=1)
+
+    log_prob_ref_chosen = ref_sequence_log_probs[0]
+    log_prob_ref_rejected = ref_sequence_log_probs[1]
+
+    policy_log_ratio = log_prob_chosen - log_prob_rejected
+    reference_log_ratio = log_prob_ref_chosen - log_prob_ref_rejected
+
+    loss = -torch.nn.functional.logsigmoid(
+        beta * (policy_log_ratio - reference_log_ratio)
+    )
+
+    return loss
+    # raise NotImplementedError
