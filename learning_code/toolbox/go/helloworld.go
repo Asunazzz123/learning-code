@@ -1,6 +1,8 @@
 package main
 
 import "fmt"
+import "test/fm"
+
 
 func main(){
 	var v1 = 1
@@ -13,6 +15,7 @@ func main(){
 	fmt.Println(v3)
 	fmt.Println(v4)
 	fmt.Println(v5)
+	fm.Pr()
 }
 
 func add(a int,b int) int{
