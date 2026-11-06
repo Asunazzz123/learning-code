@@ -4,7 +4,7 @@ _input_length:
 _punch_length:
     .byte 8                       // 每组位数，整除总位数
 
-.dss
+.bss
 
 _mod8_00:
     .byte 0
