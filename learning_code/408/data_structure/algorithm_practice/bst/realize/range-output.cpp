@@ -30,8 +30,12 @@ int main(){
     TreeNone* n1 = new TreeNone{2,n3,n4};
     TreeNone* n2 = new TreeNone{6,n5,n6};
     TreeNone* n0 = new TreeNone{4,n1,n2};
-
+    TreeNone* ptrs[] = {n0,n1,n2,n3,n4,n5,n6};
     // printrange(n0,3,6);
     printrange(n0,4,6);
     std::cout << '\n';
+
+    for (TreeNone* ptr : ptrs){
+        delete ptr;
+    }
 }
