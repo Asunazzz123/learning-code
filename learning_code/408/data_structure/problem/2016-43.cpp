@@ -2,6 +2,7 @@
 #include<vector>
 #include<iostream>
 
+// Lomuto 单向划分
 int partition(std::vector<int>&a, int left, int right){
     int pivot = a[right];
     int boundary = left;
@@ -14,6 +15,7 @@ int partition(std::vector<int>&a, int left, int right){
     std::swap(a[boundary], a[right]);
     return boundary;
 }
+
 
 void quickSort(std::vector<int>& a, int left, int right) {
     if (left >= right) {
